@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!--
+  FIGURE TURNAROUND: checks js/minifig.js against the owner's blueprint reference (front, right, back, left).
+  Top row: four straight-on views, no perspective. Bottom: a three-quarter view with studio lighting.
+  Add ?wire to the URL for blueprint-style outlines.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Figure turnaround: CanUteach.me</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<style>
+  html,body{margin:0;height:100%;background:#24418f;color:#fff;font-family:Arial,Helvetica,sans-serif}
+  canvas{display:block;width:100vw;height:100vh}
+  .labels{position:fixed;left:0;right:0;top:calc(56vh - 30px);display:grid;grid-template-columns:repeat(4,1fr);text-align:center;font-size:15px;letter-spacing:.06em;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="labels"><span>FRONT</span><span>RIGHT</span><span>BACK</span><span>LEFT</span></div>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { buildMinifig, lightFigure } from '../js/minifig.js?v=5';
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x24418f);
+renderer.setScissorTest(true);
+
+const scene = new THREE.Scene();
+const fig = buildMinifig(THREE);
+scene.add(fig.group);
+lightFigure(THREE, renderer, scene, RoomEnvironment);
+if (new URLSearchParams(location.search).has('wire'))
+  fig.group.traverse(o => { if (o.isMesh) { o.material = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }); } });
+
+const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 500);
+const persp = new THREE.PerspectiveCamera(28, 1, 1, 1000);
+const midY = fig.height / 2;
+
+function draw(){
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  const topH = Math.round(h * 0.56), cellW = w / 4;
+  [0, Math.PI / 2, Math.PI, -Math.PI / 2].forEach((rot, i) => {
+    fig.group.rotation.y = rot;
+    const view = 50, aspect = cellW / topH;
+    ortho.left = -view * aspect / 2; ortho.right = view * aspect / 2; ortho.top = view / 2; ortho.bottom = -view / 2;
+    ortho.position.set(0, midY, 200); ortho.lookAt(0, midY, 0); ortho.updateProjectionMatrix();
+    renderer.setViewport(i * cellW, h - topH, cellW, topH); renderer.setScissor(i * cellW, h - topH, cellW, topH);
+    renderer.render(scene, ortho);
+  });
+  fig.group.rotation.y = -0.5;
+  persp.aspect = w / (h - topH); persp.position.set(0, midY + 14, 120); persp.lookAt(0, midY - 1, 0); persp.updateProjectionMatrix();
+  renderer.setViewport(0, 0, w, h - topH); renderer.setScissor(0, 0, w, h - topH);
+  renderer.render(scene, persp);
+}
+draw();
+addEventListener('resize', draw);
+</script>
+</body>
+</html>

@@ -180,6 +180,7 @@ Three testimonials exist, and `mockups/feature.html` now shows all three in full
 | Item | Owner |
 |------|-------|
 | Which phone number is correct: 604-255-7434 or 604-225-7434. | User |
+| Address confirmed by the user on 2026-11-26: 1628 W 1st Ave, Vancouver, BC V6J 1G1. This replaces the Hornby Street address shown on the current site. Used in the footer and the chat helper. | Done |
 | Confirm "We fix it" as the headline, or supply another. A brick-built headline needs a glyph drawn for each letter used. | User |
 | Whether Book a repair keeps linking to `signup-u-teach.as.me` or uses a new on-site form. | User |
 | Confirm the booking-page services and prices are current, and whether the "25% off" on the one-hour repair is permanent. | User |

@@ -12,6 +12,13 @@
 <meta name="description" content="Computer repair in Vancouver, starting with a free 30-minute consult, plus patient computer lessons for kids and seniors. Book a repair online.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<link rel="stylesheet" href="css/chatbot.css?v=5">
 <style>
 :root{
   /* Palette sampled from the user's doodles */
@@ -345,7 +352,7 @@ h3.sub{font-family:var(--font-heading);font-size:24px;line-height:1.15;margin:40
     </div>
     <div>
       <h2>Find us</h2>
-      <address>1281 Hornby Street, #636 (Bounz Office)<br>Vancouver BC V6Z 0G8, Canada</address>
+      <address>1628 W 1st Ave<br>Vancouver, BC V6J 1G1</address>
       <p>TODO: confirm opening hours (the old site says Monday to Saturday in one place and Monday to Friday in another), 10:00 am to 5:30 pm.</p>
     </div>
     <div>
@@ -666,5 +673,6 @@ async function start(){
 document.getElementById('skip').addEventListener('click', () => finish());
 start();
 </script>
+<script type="module" src="js/chatbot.js?v=5"></script>
 </body>
 </html>
