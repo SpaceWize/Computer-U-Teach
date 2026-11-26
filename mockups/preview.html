@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<!--
+  PREVIEW: canuteach.me overhaul (hero + repair services), for approval before the final mockups.
+
+  Direction comes from the user's three reference images and notes:
+  - Image 1 (doodle, rows of studded bricks): brick shape, three studs per brick, red/blue/yellow/green palette.
+  - Image 2 (photo, "LET'S PLAY" spelled in bricks on a green baseplate): headline built from bricks on a studded plate.
+  - Image 3 (doodle, full wall with two cyan panels): hero layout. Panel 1 = headline + jump buttons, panel 2 = info + CTA.
+  - Notes: 3D bricks fall and stack into a wall; when it is full the hero text and buttons appear; the rest of the
+    page looks like a building-instructions manual; weak phones get an SVG wall instead; three.js is welcome.
+
+  Effects used:
+  - Falling brick wall: original three.js scene (InstancedMesh), written for this project.
+  - Toast Overshoot curve, kinetics.colorion.co/effects/toast-overshoot/ : the settle on panels and the SVG rows.
+  - Dot Pattern, magicui.design/docs/components/dot-pattern : rewritten as plain CSS studs on plates.
+  - Button "hot-catfish-48" by adamgiebl, uiverse.io : tilt-and-press CTA, glow removed.
+
+  Copy is a draft rewording of the current site. TODO items are waiting on the owner.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preview: CanUteach.me brick hero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Palette sampled from the user's doodles */
+  --color-red:#ed1c24; --color-red-dark:#a80f15;
+  --color-blue:#3f48cc; --color-blue-dark:#2a318f;
+  --color-yellow:#fff200; --color-yellow-dark:#b3a900;
+  --color-green:#0ed145; --color-green-dark:#09902f;
+  --color-plate:#00a8f3; --color-plate-dark:#0079b0;
+  --color-ink:#1b1b1b; --color-paper:#ffffff;
+  --color-manual:#d5e6f3; --color-manual-line:#9dbcd4;
+  --font-heading:"Archivo Black","Arial Black",Impact,sans-serif;
+  --font-body:"Archivo",Arial,Helvetica,sans-serif;
+  --radius-brick:6px;
+  --settle:cubic-bezier(.18,1.25,.4,1);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:var(--font-body);color:var(--color-ink);background:var(--color-manual);line-height:1.5}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--color-ink);outline-offset:3px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* ================= HERO ================= */
+.hero{position:relative;min-height:100svh;overflow:hidden;background:#fff;display:grid;place-items:center;padding:72px 16px 88px}
+/* Default wall (also the no-JavaScript wall): a static SVG brick pattern */
+.wall{position:absolute;inset:0;
+  background-color:var(--color-red);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='150'%3E%3Cg stroke='%23fff' stroke-width='2'%3E%3Crect width='130' height='75' fill='%23ed1c24'/%3E%3Crect x='130' width='130' height='75' fill='%233f48cc'/%3E%3Crect x='260' width='130' height='75' fill='%23fff200'/%3E%3Crect x='390' width='130' height='75' fill='%230ed145'/%3E%3Crect x='-65' y='75' width='130' height='75' fill='%233f48cc'/%3E%3Crect x='65' y='75' width='130' height='75' fill='%23ed1c24'/%3E%3Crect x='195' y='75' width='130' height='75' fill='%230ed145'/%3E%3Crect x='325' y='75' width='130' height='75' fill='%23ed1c24'/%3E%3Crect x='455' y='75' width='130' height='75' fill='%233f48cc'/%3E%3C/g%3E%3C/svg%3E");
+  background-position:center bottom}
+.js .wall{background:#fff}
+.wall canvas,.wall svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.wall .row{animation:row-drop .6s var(--settle) both;animation-delay:calc(var(--r) * .2s)}
+.wall.still .row{animation:none}
+@keyframes row-drop{from{transform:translateY(-110vh)}to{transform:none}}
+
+.hero-ui{position:relative;z-index:1;width:min(100%,640px);display:grid;gap:22px;justify-items:center}
+.js .hero-ui{visibility:hidden}
+.built .hero-ui{visibility:visible}
+.plate{width:100%;background-color:var(--color-plate);border-radius:var(--radius-brick);
+  box-shadow:0 8px 0 var(--color-plate-dark),0 18px 30px rgba(0,0,0,.28);
+  padding:26px 22px;text-align:center;
+  background-image:
+    radial-gradient(circle at 50% 44%, rgba(255,255,255,.2) 0 5px, transparent 6px),
+    radial-gradient(circle at 50% 50%, rgba(0,0,0,.14) 0 8px, transparent 9px);
+  background-size:28px 28px;background-position:center}
+.plate.info{width:92%}
+.built .plate{animation:plate-in .55s var(--settle) both}
+.built .plate.info{animation-delay:.9s}
+@keyframes plate-in{from{transform:translateY(-40px) scale(.94);opacity:0}to{transform:none;opacity:1}}
+
+.hero h1{margin:0 0 18px;font-family:var(--font-heading);font-size:clamp(34px,7vw,60px);line-height:1.05}
+.brick-word{display:flex;flex-wrap:wrap;justify-content:center;gap:calc(var(--cell) * 1.2) calc(var(--cell) * 2.5);--cell:clamp(12px,2.1vw,15px)}
+.brick-word .word{display:flex;gap:var(--cell)}
+.brick-word .glyph{display:grid;grid-auto-rows:var(--cell)}
+.brick-word .cell{width:var(--cell);height:var(--cell)}
+.brick-word .on{background-color:var(--c);
+  background-image:radial-gradient(circle at 50% 45%, rgba(255,255,255,.45) 0 22%, rgba(0,0,0,.22) 23% 38%, transparent 40%);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.28)}
+.built .brick-word .on{animation:cell-in .32s var(--settle) both;animation-delay:calc(.35s + var(--n) * 9ms)}
+@keyframes cell-in{from{transform:translateY(-18px) scale(.4);opacity:0}to{transform:none;opacity:1}}
+
+.jump{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:0;padding:0;list-style:none}
+.jump a{display:inline-block;font-weight:700;text-decoration:none;padding:10px 18px;min-height:44px;border-radius:var(--radius-brick);
+  background:var(--color-paper);border:2px solid var(--color-ink);box-shadow:0 4px 0 var(--color-ink)}
+.jump a:hover{transform:translateY(2px);box-shadow:0 2px 0 var(--color-ink)}
+.plate.info p{margin:0 auto 20px;max-width:42ch;font-size:18px;font-weight:600;background:var(--color-paper);border:2px solid var(--color-ink);border-radius:var(--radius-brick);padding:12px 16px}
+
+/* CTA: hot-catfish-48 tilt-and-press, glow removed */
+.press{display:inline-block;font:700 19px var(--font-body);text-decoration:none;padding:.9em 2.2em;cursor:pointer;color:var(--color-ink);
+  background:var(--color-yellow);border:2px solid var(--color-ink);border-bottom:7px solid var(--color-ink);border-radius:var(--radius-brick);
+  transform:perspective(220px) rotateX(12deg);transition:transform .25s}
+.press:hover{transform:perspective(200px) rotateX(24deg) translateY(2px)}
+.press:active{transform:perspective(190px) rotateX(30deg) translateY(5px)}
+
+.controls{position:absolute;z-index:2;left:12px;right:12px;bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center}
+.controls button{font:700 14px var(--font-body);min-height:40px;padding:8px 14px;background:#fff;color:var(--color-ink);border:2px solid var(--color-ink);border-radius:var(--radius-brick);cursor:pointer}
+.controls .review{font-size:13px;font-weight:700;background:var(--color-ink);color:#fff;padding:4px 8px;border-radius:4px}
+.built #skip{display:none}
+html:not(.js) .controls{display:none}
+
+/* ================= MANUAL PAGES ================= */
+.manual{max-width:1040px;margin:0 auto;padding:40px 16px 24px}
+.manual-head{display:flex;align-items:center;gap:14px;border-bottom:4px solid var(--color-ink);padding-bottom:12px;margin-bottom:28px}
+.manual-head .no{font-family:var(--font-heading);font-size:20px;background:var(--color-red);color:#fff;padding:6px 12px;border-radius:var(--radius-brick)}
+.manual-head h2{font-family:var(--font-heading);font-size:clamp(26px,4.5vw,40px);line-height:1.1;margin:0}
+.lede{max-width:60ch;font-size:18px;margin:0 0 28px}
+.steps{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));padding:0;margin:0;list-style:none;counter-reset:step}
+.step{counter-increment:step;position:relative;background:var(--color-paper);border:2px solid var(--color-manual-line);border-radius:var(--radius-brick);padding:18px 18px 20px}
+.step::before{content:counter(step);font-family:var(--font-heading);font-size:64px;line-height:.9;display:block;margin-bottom:8px}
+.step h3{font-family:var(--font-heading);font-size:20px;line-height:1.15;margin:12px 0 6px}
+.step p{margin:0;max-width:40ch}
+.slot{display:grid;place-items:center;text-align:center;aspect-ratio:4/3;border:2px dashed var(--color-manual-line);border-radius:var(--radius-brick);
+  background:var(--color-manual);font-size:14px;font-weight:600;padding:12px;color:#2c4a60}
+.parts{margin-top:14px;border:3px solid var(--color-ink);background:var(--color-yellow);border-radius:var(--radius-brick);padding:10px 12px}
+.parts b{display:block;font-family:var(--font-heading);font-weight:400;font-size:14px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px}
+.parts ul{margin:0;padding:0;list-style:none;font-weight:600;font-size:15px}
+.parts li::before{content:"1x  ";font-family:var(--font-heading)}
+.callout{margin-top:26px;display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));align-items:center}
+.quote{margin:0;background:var(--color-paper);border-left:10px solid var(--color-green);border-radius:var(--radius-brick);padding:18px 20px}
+.quote p{margin:0 0 10px}
+.quote cite{font-style:normal;font-weight:700}
+.cta-box{text-align:center;padding:10px}
+.cta-box p{font-family:var(--font-heading);font-size:22px;line-height:1.15;margin:0 0 18px}
+.next{margin-top:36px;background:var(--color-blue);color:#fff;border-radius:var(--radius-brick);padding:22px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;box-shadow:0 7px 0 var(--color-blue-dark)}
+.next h2{font-family:var(--font-heading);font-size:24px;margin:0 0 4px}
+.next p{margin:0;max-width:52ch}
+.next a{display:inline-block;font-weight:700;text-decoration:none;background:#fff;color:var(--color-ink);padding:12px 20px;border-radius:var(--radius-brick);border:2px solid var(--color-ink)}
+.next a:focus-visible{outline-color:#fff}
+.page-no{max-width:1040px;margin:0 auto;padding:8px 16px 40px;display:flex;justify-content:flex-end}
+.page-no span{font-family:var(--font-heading);background:var(--color-paper);border:2px solid var(--color-manual-line);border-radius:999px;padding:4px 16px}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .wall .row,.built .plate,.built .brick-word .on{animation:none}
+  .press,.jump a{transition:none}
+  .press:hover,.press:active{transform:perspective(220px) rotateX(12deg)}
+}
+</style>
+</head>
+<body>
+
+<header class="hero" id="top">
+  <div class="wall" id="wall" aria-hidden="true"></div>
+
+  <div class="hero-ui">
+    <div class="plate">
+      <h1 id="hero-title"><span id="hero-text">We fix it.</span><span class="brick-word" id="brick-word" aria-hidden="true"></span></h1>
+      <nav aria-label="Jump to a section">
+        <ul class="jump">
+          <li><a href="#repairs">Repair services</a></li>
+          <li><a href="#classes">HTML classes</a></li>
+        </ul>
+      </nav>
+    </div>
+    <div class="plate info">
+      <p>Computer acting up? Our technicians find the problem and get your device running smoothly again.</p>
+      <a class="press" href="#book">Book a repair</a>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button type="button" id="skip">Skip animation</button>
+    <span class="review">Review only:</span>
+    <button type="button" id="replay">Replay</button>
+    <button type="button" id="mode">Show SVG fallback</button>
+  </div>
+</header>
+
+<main>
+  <section class="manual" id="repairs" aria-labelledby="repairs-title">
+    <div class="manual-head"><span class="no">1</span><h2 id="repairs-title">Repair services</h2></div>
+    <p class="lede">A dedicated repair service for your devices, handled with precision and care. Here is how a repair goes, step by step.</p>
+
+    <ol class="steps">
+      <li class="step">
+        <div class="slot">Image slot<br>Legofied picture: a broken computer</div>
+        <h3>Tell us what's wrong</h3>
+        <p>Book a repair and describe the problem in your own words. No tech terms needed.</p>
+      </li>
+      <li class="step">
+        <div class="slot">Image slot<br>Legofied picture: technician at work</div>
+        <h3>We find it and fix it</h3>
+        <p>Our technicians diagnose the issue and repair it.</p>
+        <div class="parts"><b>Services and prices</b>
+          <ul><li>TODO: service and price</li><li>TODO: service and price</li><li>TODO: service and price</li></ul>
+        </div>
+      </li>
+      <li class="step">
+        <div class="slot">Image slot<br>Legofied picture: a working computer</div>
+        <h3>Back up and running</h3>
+        <p>You get your device back running smoothly and efficiently.</p>
+      </li>
+    </ol>
+
+    <div class="callout" id="book">
+      <blockquote class="quote">
+        <p>"I wanted to change the hard drive on a laptop to SSD and Matthew was very helpful, fast, and responsive and charged me a reasonable price."</p>
+        <cite>Arash Khodadadi</cite>
+      </blockquote>
+      <div class="cta-box">
+        <p>Ready to start your repair?</p>
+        <a class="press" href="#book">Book a repair</a>
+      </div>
+    </div>
+
+    <div class="next" id="classes">
+      <div>
+        <h2>Next build: HTML classes</h2>
+        <p>Learn to create your own sites, with patient teaching at your own pace. TODO: class details.</p>
+      </div>
+      <a href="#classes">Book a free class</a>
+    </div>
+  </section>
+  <div class="page-no"><span>1</span></div>
+</main>
+
+<script type="module">
+const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+const PALETTE = ['#ed1c24','#ed1c24','#ed1c24','#3f48cc','#3f48cc','#fff200','#0ed145'];
+const root = document.documentElement;
+const wall = document.getElementById('wall');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const params = new URLSearchParams(location.search);
+root.classList.add('js');
+
+/* ---------- headline built from bricks (image 2) ---------- */
+const GLYPHS = {
+  W:['10001','10001','10101','11011','10001'], E:['1111','1000','1110','1000','1111'],
+  F:['1111','1000','1110','1000','1000'],      I:['111','010','010','010','111'],
+  X:['10001','01010','00100','01010','10001'], T:['11111','00100','00100','00100','00100']
+};
+(function buildHeadline(){
+  const text = 'WE FIX IT';
+  const colors = ['#fff200','#ed1c24','#0ed145','#3f48cc','#ffffff'];
+  const host = document.getElementById('brick-word');
+  let n = 0, letter = 0, html = '';
+  for (const word of text.split(' ')) {
+    html += '<span class="word">';
+    for (const ch of word) {
+      const g = GLYPHS[ch]; if (!g) continue;
+      const c = colors[letter++ % colors.length];
+      html += `<span class="glyph" style="grid-template-columns:repeat(${g[0].length},var(--cell));--c:${c}">`;
+      for (const row of g) for (const bit of row)
+        html += bit === '1' ? `<span class="cell on" style="--n:${n++}"></span>` : '<span class="cell"></span>';
+      html += '</span>';
+    }
+    html += '</span>';
+  }
+  host.innerHTML = html;
+  document.getElementById('hero-text').className = 'sr-only';
+})();
+
+/* ---------- shared wall layout: running-bond rows, bottom row first ---------- */
+function layout(w, h){
+  const bw = w < 600 ? 86 : 130, bh = Math.round(bw * 0.58);
+  const cols = Math.ceil(w / bw) + 1, rows = Math.ceil(h / bh);
+  const bricks = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      bricks.push({ x: (r % 2 ? -bw / 2 : 0) + c * bw, r, color: PALETTE[(Math.random() * PALETTE.length) | 0] });
+  return { bw, bh, rows, bricks };
+}
+
+let stop = () => {};          // cancels whatever is currently running
+let finish = () => {};        // jumps the current wall to its finished state
+const reveal = () => root.classList.add('built');
+
+/* ---------- SVG wall: fallback for weak phones, reduced motion, or no WebGL ---------- */
+function runSvg(animate){
+  const w = wall.clientWidth, h = wall.clientHeight, L = layout(w, h);
+  let s = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMax slice">`;
+  for (let r = 0; r < L.rows; r++) {
+    s += `<g class="row" style="--r:${r}">`;
+    for (const b of L.bricks) if (b.r === r) {
+      const y = h - (r + 1) * L.bh, sw = L.bw * 0.2, sh = L.bh * 0.2;
+      for (const k of [0.2, 0.5, 0.8])
+        s += `<rect x="${b.x + L.bw * k - sw / 2}" y="${y - sh}" width="${sw}" height="${sh + 4}" rx="${sw * 0.3}" fill="${b.color}"/>`;
+      s += `<rect x="${b.x}" y="${y}" width="${L.bw}" height="${L.bh}" fill="${b.color}" stroke="#fff" stroke-width="2"/>`;
+    }
+    s += '</g>';
+  }
+  wall.innerHTML = s + '</svg>';
+  wall.classList.toggle('still', !animate);
+  if (!animate) { reveal(); return; }
+  const timer = setTimeout(reveal, (L.rows * 0.2 + 0.6) * 1000);
+  finish = () => { clearTimeout(timer); wall.classList.add('still'); reveal(); };
+  stop = () => clearTimeout(timer);
+}
+
+/* ---------- three.js wall: 3D bricks fall and stack ---------- */
+async function run3d(){
+  const THREE = await import(THREE_URL);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setClearColor(0xffffff);
+  wall.innerHTML = ''; wall.classList.remove('still'); wall.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x9a9a9a, 2.2));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(-0.5, 0.9, 1); scene.add(sun);
+  const camera = new THREE.PerspectiveCamera(30, 1, 10, 10000);
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.38, metalness: 0 });
+  const dummy = new THREE.Object3D(), m = new THREE.Matrix4(), local = new THREE.Matrix4(), col = new THREE.Color();
+
+  let L, boxes, studs, raf = 0, t0 = 0, done = false, disposed = false;
+
+  function build(){
+    const w = wall.clientWidth, h = wall.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    const dist = (h / 2) / Math.tan(THREE.MathUtils.degToRad(15));   // 1 world unit = 1 CSS pixel at z = 0
+    camera.position.set(w / 2, h / 2, dist); camera.lookAt(w / 2, h / 2, 0); camera.updateProjectionMatrix();
+    if (boxes) { scene.remove(boxes, studs); boxes.geometry.dispose(); studs.geometry.dispose(); }
+    L = layout(w, h); L.h = h; L.depth = L.bh * 0.9;
+    const n = L.bricks.length;
+    boxes = new THREE.InstancedMesh(new THREE.BoxGeometry(L.bw - 2, L.bh - 2, L.depth), mat, n);
+    studs = new THREE.InstancedMesh(new THREE.CylinderGeometry(L.bw * 0.1, L.bw * 0.1, L.bh * 0.2, 20), mat, n * 3);
+    // Instances start off-screen, so the auto-computed bounds would cull the whole wall
+    boxes.frustumCulled = false; studs.frustumCulled = false;
+    L.bricks.forEach((b, i) => {
+      b.start =b.r * 0.26 + Math.random() * 0.3;
+      b.rz = (Math.random() - 0.5) * 1.4; b.rx = (Math.random() - 0.5) * 2.2;
+      col.set(b.color); boxes.setColorAt(i, col);
+      for (let k = 0; k < 3; k++) studs.setColorAt(i * 3 + k, col);
+    });
+    L.total = Math.max(...L.bricks.map(b => b.start)) + 0.75;
+    scene.add(boxes, studs);
+  }
+
+  const bounce = p => { const n = 7.5625, d = 2.75;
+    if (p < 1 / d) return n * p * p;
+    if (p < 2 / d) return n * (p -= 1.5 / d) * p + 0.75;
+    if (p < 2.5 / d) return n * (p -= 2.25 / d) * p + 0.9375;
+    return n * (p -= 2.625 / d) * p + 0.984375; };
+
+  function place(t){
+    L.bricks.forEach((b, i) => {
+      const p = Math.min(Math.max((t - b.start) / 0.75, 0), 1), e = bounce(p), spin = 1 - Math.min(p * 1.6, 1);
+      dummy.position.set(b.x + L.bw / 2, b.r * L.bh + L.bh / 2 + (1 - e) * (L.h + 240), -L.depth / 2 + (1 - Math.min(p * 1.25, 1)) * 260);
+      dummy.rotation.set(b.rx * spin, 0, b.rz * spin);
+      dummy.scale.setScalar(p > 0 ? 1 : 0.0001);
+      dummy.updateMatrix(); boxes.setMatrixAt(i, dummy.matrix);
+      [-0.3, 0, 0.3].forEach((k, j) => {
+        local.makeTranslation(L.bw * k, L.bh / 2 + L.bh * 0.1 - 1, 0);
+        m.multiplyMatrices(dummy.matrix, local); studs.setMatrixAt(i * 3 + j, m);
+      });
+    });
+    boxes.instanceMatrix.needsUpdate = true; studs.instanceMatrix.needsUpdate = true;
+    renderer.render(scene, camera);
+  }
+
+  function frame(now){
+    if (disposed) return;
+    if (!t0) t0 = now;
+    const t = (now - t0) / 1000;
+    place(t);
+    if (t >= L.total) { done = true; reveal(); return; }   // loop stops once the wall is built
+    raf = requestAnimationFrame(frame);
+  }
+
+  build();
+  raf = requestAnimationFrame(frame);
+  finish = () => { cancelAnimationFrame(raf); done = true; place(1e6); reveal(); };
+  let rt = 0;
+  const onResize = () => { clearTimeout(rt); rt = setTimeout(() => { if (done && !disposed) { build(); place(1e6); } }, 150); };
+  addEventListener('resize', onResize);
+  stop = () => { disposed = true; cancelAnimationFrame(raf); removeEventListener('resize', onResize); renderer.dispose(); };
+}
+
+/* ---------- pick a mode ---------- */
+function weakDevice(){
+  const c = document.createElement('canvas');
+  if (!(c.getContext('webgl2') || c.getContext('webgl'))) return true;
+  if (navigator.deviceMemory && navigator.deviceMemory <= 2) return true;      // TODO: tune on a real cheap Android phone
+  if (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2) return true;
+  return false;
+}
+let mode = params.get('wall') || (weakDevice() ? 'svg' : '3d');
+const modeBtn = document.getElementById('mode');
+
+async function start(){
+  stop(); stop = () => {}; finish = reveal;
+  root.classList.remove('built');
+  modeBtn.textContent = mode === '3d' ? 'Show SVG fallback' : 'Show 3D version';
+  if (reduced) { runSvg(false); return; }
+  if (mode === '3d') {
+    try { await run3d(); return; } catch (err) { console.warn('3D wall unavailable, using SVG', err); mode = 'svg'; modeBtn.textContent = 'Show 3D version'; }
+  }
+  runSvg(true);
+}
+document.getElementById('skip').addEventListener('click', () => finish());
+document.getElementById('replay').addEventListener('click', start);
+modeBtn.addEventListener('click', () => { mode = mode === '3d' ? 'svg' : '3d'; start(); });
+start();
+</script>
+</body>
+</html>

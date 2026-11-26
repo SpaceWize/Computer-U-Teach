@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<!--
+  FEATURE MOCKUP: repair services section, canuteach.me overhaul. Built from the approved preview.
+
+  Direction comes from the user's three reference images and notes:
+  - Image 1 (doodle, rows of studded bricks): brick shape, three studs per brick, red/blue/yellow/green palette.
+  - Image 2 (photo, "LET'S PLAY" spelled in bricks on a green baseplate): headline built from bricks on a studded plate.
+  - Image 3 (doodle, full wall with two cyan panels): hero layout. Panel 1 = headline + jump buttons, panel 2 = info + CTA.
+  - Notes: 3D bricks fall and stack into a wall; when it is full the hero text and buttons appear; the rest of the
+    page looks like a building-instructions manual; weak phones get an SVG wall instead; three.js is welcome.
+
+  Effects used:
+  - Instruction-manual layout (numbered build steps, parts box, page number): original, from the user's note that
+    the rest of the page looks like a manual, and the "Bold instruction-booklet" font choice.
+  - Button "hot-catfish-48" by adamgiebl, uiverse.io/adamgiebl/hot-catfish-48 : tilt-and-press CTA, glow removed.
+
+  Image slots are placeholders for the legofied pictures the owner will make.
+  Step copy is a draft rewording of the current site. Services and prices are TODO. The review is from the current site.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Repair services mockup: CanUteach.me</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Palette sampled from the user's doodles */
+  --color-red:#ed1c24; --color-red-dark:#a80f15;
+  --color-blue:#3f48cc; --color-blue-dark:#2a318f;
+  --color-yellow:#fff200; --color-yellow-dark:#b3a900;
+  --color-green:#0ed145; --color-green-dark:#09902f;
+  --color-plate:#00a8f3; --color-plate-dark:#0079b0;
+  --color-ink:#1b1b1b; --color-paper:#ffffff;
+  --color-manual:#d5e6f3; --color-manual-line:#9dbcd4;
+  --font-heading:"Archivo Black","Arial Black",Impact,sans-serif;
+  --font-body:"Archivo",Arial,Helvetica,sans-serif;
+  --radius-brick:6px;
+  --settle:cubic-bezier(.18,1.25,.4,1);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:var(--font-body);color:var(--color-ink);background:var(--color-manual);line-height:1.5}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--color-ink);outline-offset:3px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* CTA: hot-catfish-48 tilt-and-press, glow removed */
+.press{display:inline-block;font:700 19px var(--font-body);text-decoration:none;padding:.9em 2.2em;cursor:pointer;color:var(--color-ink);
+  background:var(--color-yellow);border:2px solid var(--color-ink);border-bottom:7px solid var(--color-ink);border-radius:var(--radius-brick);
+  transform:perspective(220px) rotateX(12deg);transition:transform .25s}
+.press:hover{transform:perspective(200px) rotateX(24deg) translateY(2px)}
+.press:active{transform:perspective(190px) rotateX(30deg) translateY(5px)}
+
+/* ================= MANUAL PAGES ================= */
+.manual{max-width:1040px;margin:0 auto;padding:40px 16px 24px}
+.manual-head{display:flex;align-items:center;gap:14px;border-bottom:4px solid var(--color-ink);padding-bottom:12px;margin-bottom:28px}
+.manual-head .no{font-family:var(--font-heading);font-size:20px;background:var(--color-red);color:#fff;padding:6px 12px;border-radius:var(--radius-brick)}
+.manual-head h2{font-family:var(--font-heading);font-size:clamp(26px,4.5vw,40px);line-height:1.1;margin:0}
+.lede{max-width:60ch;font-size:18px;margin:0 0 28px}
+.steps{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));padding:0;margin:0;list-style:none;counter-reset:step}
+.step{counter-increment:step;position:relative;background:var(--color-paper);border:2px solid var(--color-manual-line);border-radius:var(--radius-brick);padding:18px 18px 20px}
+.step::before{content:counter(step);font-family:var(--font-heading);font-size:64px;line-height:.9;display:block;margin-bottom:8px}
+.step h3{font-family:var(--font-heading);font-size:20px;line-height:1.15;margin:12px 0 6px}
+.step p{margin:0;max-width:40ch}
+.slot{display:grid;place-items:center;text-align:center;aspect-ratio:4/3;border:2px dashed var(--color-manual-line);border-radius:var(--radius-brick);
+  background:var(--color-manual);font-size:14px;font-weight:600;padding:12px;color:#2c4a60}
+.parts{margin-top:14px;border:3px solid var(--color-ink);background:var(--color-yellow);border-radius:var(--radius-brick);padding:10px 12px}
+.parts b{display:block;font-family:var(--font-heading);font-weight:400;font-size:14px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px}
+.parts ul{margin:0;padding:0;list-style:none;font-weight:600;font-size:15px}
+.parts li::before{content:"1x  ";font-family:var(--font-heading)}
+.callout{margin-top:26px;display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));align-items:center}
+.quote{margin:0;background:var(--color-paper);border-left:10px solid var(--color-green);border-radius:var(--radius-brick);padding:18px 20px}
+.quote p{margin:0 0 10px}
+.quote cite{font-style:normal;font-weight:700}
+.cta-box{text-align:center;padding:10px}
+.cta-box p{font-family:var(--font-heading);font-size:22px;line-height:1.15;margin:0 0 18px}
+.next{margin-top:36px;background:var(--color-blue);color:#fff;border-radius:var(--radius-brick);padding:22px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;box-shadow:0 7px 0 var(--color-blue-dark)}
+.next h2{font-family:var(--font-heading);font-size:24px;margin:0 0 4px}
+.next p{margin:0;max-width:52ch}
+.next a{display:inline-block;font-weight:700;text-decoration:none;background:#fff;color:var(--color-ink);padding:12px 20px;border-radius:var(--radius-brick);border:2px solid var(--color-ink)}
+.next a:focus-visible{outline-color:#fff}
+.press.small{font-size:15px;padding:.7em 1.1em;border-bottom-width:5px}
+.manual-head .no.blue{background:var(--color-blue)}
+h3.sub{font-family:var(--font-heading);font-size:24px;line-height:1.15;margin:40px 0 16px;scroll-margin-top:16px}
+.menu{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));padding:0;margin:0;list-style:none}
+.service{position:relative;display:flex;flex-direction:column;gap:8px;background:var(--color-paper);border:3px solid var(--color-ink);border-radius:var(--radius-brick);padding:18px}
+.service .qty{align-self:flex-start;font-family:var(--font-heading);font-size:14px;background:var(--color-yellow);border:2px solid var(--color-ink);border-radius:var(--radius-brick);padding:2px 10px}
+.service h4{font-family:var(--font-heading);font-size:20px;line-height:1.15;margin:4px 0 0}
+.service p{margin:0;flex:1;max-width:40ch}
+.price{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;padding-top:12px;border-top:2px dashed var(--color-manual-line)}
+.price b{font-family:var(--font-heading);font-weight:400;font-size:28px}
+.reviews{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));align-items:start}
+.quote.blue{border-left-color:var(--color-blue)}
+.quote.yellow{border-left-color:var(--color-yellow-dark)}
+.quote .tag{float:right;font-size:13px;font-weight:700;background:var(--color-manual);border-radius:4px;padding:2px 8px}
+.manual > .cta-box{margin-top:32px}
+.page-no{max-width:1040px;margin:0 auto;padding:8px 16px 40px;display:flex;justify-content:flex-end}
+.page-no span{font-family:var(--font-heading);background:var(--color-paper);border:2px solid var(--color-manual-line);border-radius:999px;padding:4px 16px}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .press{transition:none}
+  .press:hover,.press:active{transform:perspective(220px) rotateX(12deg)}
+}
+</style>
+</head>
+<body>
+
+<main>
+  <section class="manual" id="repairs" aria-labelledby="repairs-title">
+    <div class="manual-head"><span class="no">1</span><h2 id="repairs-title">Repair services</h2></div>
+    <p class="lede">A dedicated repair service for your devices, handled with precision and care. Here is how a repair goes, step by step.</p>
+
+    <ol class="steps">
+      <li class="step">
+        <div class="slot">Image slot<br>Legofied picture: a broken computer</div>
+        <h3>Tell us what's wrong</h3>
+        <p>Book a repair and describe the problem in your own words. No tech terms needed.</p>
+      </li>
+      <li class="step">
+        <div class="slot">Image slot<br>Legofied picture: technician at work</div>
+        <h3>We find it and fix it</h3>
+        <p>Our technicians diagnose the issue and repair it.</p>
+      </li>
+      <li class="step">
+        <div class="slot">Image slot<br>Legofied picture: a working computer</div>
+        <h3>Back up and running</h3>
+        <p>You get your device back running smoothly and efficiently.</p>
+      </li>
+    </ol>
+
+    <!-- Services and prices are taken from the current booking page (signup-u-teach.as.me), 2026-11-26. -->
+    <h3 class="sub" id="book">Pick your repair</h3>
+    <ul class="menu">
+      <li class="service">
+        <span class="qty">30 min</span>
+        <h4>Free repair booking or consult</h4>
+        <p>Not sure what's wrong? Start here. We take a look and tell you what it needs.</p>
+        <div class="price"><b>Free</b><a class="press small" href="https://signup-u-teach.as.me/">Book free consult</a></div>
+      </li>
+      <li class="service">
+        <span class="qty">1 hour</span>
+        <h4>One-hour repair</h4>
+        <p>An hour of hands-on repair time, currently 25% off.</p>
+        <div class="price"><b>CA$50</b><a class="press small" href="https://signup-u-teach.as.me/">Book a repair</a></div>
+      </li>
+      <li class="service">
+        <span class="qty">1 hour</span>
+        <h4>Guaranteed Fix, online</h4>
+        <p>Repair or consult done remotely, online only.</p>
+        <div class="price"><b>CA$65</b><a class="press small" href="https://signup-u-teach.as.me/">Book online fix</a></div>
+      </li>
+    </ul>
+
+    <h3 class="sub">What customers say</h3>
+    <div class="reviews">
+      <blockquote class="quote">
+        <p>"I wanted to change the hard drive on a laptop to SSD and Matthew was very helpful, fast, and responsive and charged me a reasonable price. He helped me in finding different drive options and prices and cared for the laptop and the work."</p>
+        <cite>Arash Khodadadi</cite><span class="tag">Repair</span>
+      </blockquote>
+      <blockquote class="quote blue">
+        <p>"Already setting up my next months classes with Matt !! Every senior should take advantage of the wealth of knowledge available to them. My frustrations are fading as my computer skills grow and develop. I have a very patient teacher."</p>
+        <cite>Caron Smed</cite><span class="tag">Lessons</span>
+      </blockquote>
+      <blockquote class="quote yellow">
+        <p>"My 9 year old son attended Matt's kids computer camp. He loved it! It was fun and engaging. He's excited to take more classes in the future!"</p>
+        <cite>Jennifer Rowe</cite><span class="tag">Kids camp</span>
+      </blockquote>
+    </div>
+
+    <div class="cta-box">
+      <p>Ready to start your repair?</p>
+      <a class="press" href="https://signup-u-teach.as.me/">Book a repair</a>
+    </div>
+  </section>
+
+  <section class="manual" id="classes" aria-labelledby="classes-title">
+    <div class="manual-head"><span class="no blue">2</span><h2 id="classes-title">Classes and lessons</h2></div>
+    <p class="lede">Patient, personal teaching at your own pace, for kids and seniors alike.</p>
+    <ul class="menu">
+      <li class="service">
+        <span class="qty">TODO: length</span>
+        <h4>HTML class</h4>
+        <p>Learn to build your own web pages from scratch. TODO: class details from the owner; not on the booking page yet.</p>
+        <div class="price"><b>TODO</b><a class="press small" href="https://signup-u-teach.as.me/">Sign up for HTML class</a></div>
+      </li>
+      <li class="service">
+        <span class="qty">50 min</span>
+        <h4>U-Teach computer lessons</h4>
+        <p>One-to-one computer lessons on what you want to learn.</p>
+        <div class="price"><b>CA$65</b><a class="press small" href="https://signup-u-teach.as.me/">Book a lesson</a></div>
+      </li>
+      <li class="service">
+        <span class="qty">1 hour</span>
+        <h4>Online lesson for elders</h4>
+        <p>A virtual lesson for seniors, taught patiently.</p>
+        <div class="price"><b>CA$65</b><a class="press small" href="https://signup-u-teach.as.me/">Book a lesson</a></div>
+      </li>
+      <li class="service">
+        <span class="qty">10 hours</span>
+        <h4>Website starter package</h4>
+        <p>Ten hours of work in total, starting with a 75-minute consult.</p>
+        <div class="price"><b>CA$450</b><a class="press small" href="https://signup-u-teach.as.me/">Book the consult</a></div>
+      </li>
+    </ul>
+  </section>
+  <div class="page-no"><span>2</span></div>
+</main>
+
+</body>
+</html>
