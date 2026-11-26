@@ -360,7 +360,6 @@ h3.sub{font-family:var(--font-heading);font-size:24px;line-height:1.15;margin:40
 
 <script type="module">
 const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-const PALETTE = ['#ed1c24','#ed1c24','#ed1c24','#3f48cc','#3f48cc','#fff200','#0ed145'];
 const root = document.documentElement;
 const wall = document.getElementById('wall');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -496,15 +495,44 @@ document.fonts && document.fonts.ready.then(() => { heroKey = ''; buildHero(); }
 let heroTimer = 0;
 addEventListener('resize', () => { clearTimeout(heroTimer); heroTimer = setTimeout(buildHero, 150); });
 
-/* ---------- shared wall layout: running-bond rows, bottom row first ---------- */
+/* ---------- shared wall layout: rows of mixed-length bricks, bottom row first ----------
+   Same rule as the headline: a brick's colour comes from its length (1 red, 2 blue, 3 yellow, 5 green).
+   Each row is filled left to right with random lengths until it runs past the right edge, so there are
+   never gaps. A length is re-rolled when its end would line up with a joint in the row below, which keeps
+   the wall bonded instead of forming straight vertical cracks. */
+// Share of the wall's surface each colour should cover, set by the owner:
+// red (1-long) 15%, blue (2-long) 30%, yellow (3-long) 30%, green (5-long) 25%.
+const WALL_SHARE = { 1: 15, 2: 30, 3: 30, 5: 25 };
+// A long brick covers more studs, so its odds per brick are its share divided by its length
+// (red 15, blue 15, yellow 10, green 5, out of 45).
+const WALL_ODDS = Object.entries(WALL_SHARE).map(([n, share]) => [Number(n), share / n]);
+const WALL_ODDS_TOTAL = WALL_ODDS.reduce((t, [, o]) => t + o, 0);
+function randomLength(){
+  let roll = Math.random() * WALL_ODDS_TOTAL;
+  for (const [n, o] of WALL_ODDS) { if ((roll -= o) < 0) return n; }
+  return 1;
+}
 function layout(w, h){
-  const bw = w < 600 ? 86 : 130, bh = Math.round(bw * 0.58);
-  const cols = Math.ceil(w / bw) + 1, rows = Math.ceil(h / bh);
+  const su = w < 600 ? 29 : 43;                   // one wall stud, in px
+  const bh = Math.round(su * 1.74);
+  const studsWide = Math.ceil(w / su), rows = Math.ceil(h / bh);
   const bricks = [];
-  for (let r = 0; r < rows; r++)
-    for (let c = 0; c < cols; c++)
-      bricks.push({ x: (r % 2 ? -bw / 2 : 0) + c * bw, r, color: PALETTE[(Math.random() * PALETTE.length) | 0] });
-  return { bw, bh, rows, bricks };
+  let below = new Set(), studCount = 0;
+  for (let r = 0; r < rows; r++) {
+    const joints = new Set();
+    let pos = -((Math.random() * 3) | 0);         // start a little off-screen so rows do not share a left edge
+    while (pos < studsWide) {
+      let n = 1;
+      for (let tries = 0; tries < 8; tries++) {
+        n = randomLength();
+        if (!below.has(pos + n)) break;
+      }
+      bricks.push({ x: pos * su, w: n * su, n, r, color: BRICK_COLORS[n], stud0: studCount });
+      studCount += n; pos += n; joints.add(pos);
+    }
+    below = joints;
+  }
+  return { su, bh, rows, bricks, studCount };
 }
 
 let stop = () => {};          // cancels whatever is currently running
@@ -518,10 +546,10 @@ function runSvg(animate){
   for (let r = 0; r < L.rows; r++) {
     s += `<g class="row" style="--r:${r}">`;
     for (const b of L.bricks) if (b.r === r) {
-      const y = h - (r + 1) * L.bh, sw = L.bw * 0.2, sh = L.bh * 0.2;
-      for (const k of [0.2, 0.5, 0.8])
-        s += `<rect x="${b.x + L.bw * k - sw / 2}" y="${y - sh}" width="${sw}" height="${sh + 4}" rx="${sw * 0.3}" fill="${b.color}"/>`;
-      s += `<rect x="${b.x}" y="${y}" width="${L.bw}" height="${L.bh}" fill="${b.color}" stroke="#fff" stroke-width="2"/>`;
+      const y = h - (r + 1) * L.bh, sw = L.su * 0.6, sh = L.bh * 0.2;
+      for (let k = 0; k < b.n; k++)
+        s += `<rect x="${b.x + L.su * (k + 0.5) - sw / 2}" y="${y - sh}" width="${sw}" height="${sh + 4}" rx="${sw * 0.3}" fill="${b.color}"/>`;
+      s += `<rect x="${b.x}" y="${y}" width="${b.w}" height="${L.bh}" fill="${b.color}" stroke="#fff" stroke-width="2"/>`;
     }
     s += '</g>';
   }
@@ -559,15 +587,16 @@ async function run3d(){
     if (boxes) { scene.remove(boxes, studs); boxes.geometry.dispose(); studs.geometry.dispose(); }
     L = layout(w, h); L.h = h; L.depth = L.bh * 0.9;
     const n = L.bricks.length;
-    boxes = new THREE.InstancedMesh(new THREE.BoxGeometry(L.bw - 2, L.bh - 2, L.depth), mat, n);
-    studs = new THREE.InstancedMesh(new THREE.CylinderGeometry(L.bw * 0.1, L.bw * 0.1, L.bh * 0.2, 20), mat, n * 3);
+    // One stud-wide box, stretched per brick to its length; one cylinder per stud
+    boxes = new THREE.InstancedMesh(new THREE.BoxGeometry(L.su, L.bh - 2, L.depth), mat, n);
+    studs = new THREE.InstancedMesh(new THREE.CylinderGeometry(L.su * 0.3, L.su * 0.3, L.bh * 0.2, 20), mat, L.studCount);
     // Instances start off-screen, so the auto-computed bounds would cull the whole wall
     boxes.frustumCulled = false; studs.frustumCulled = false;
     L.bricks.forEach((b, i) => {
       b.start =b.r * 0.26 + Math.random() * 0.3;
       b.rz = (Math.random() - 0.5) * 1.4; b.rx = (Math.random() - 0.5) * 2.2;
       col.set(b.color); boxes.setColorAt(i, col);
-      for (let k = 0; k < 3; k++) studs.setColorAt(i * 3 + k, col);
+      for (let k = 0; k < b.n; k++) studs.setColorAt(b.stud0 + k, col);
     });
     L.total = Math.max(...L.bricks.map(b => b.start)) + 0.75;
     scene.add(boxes, studs);
@@ -582,14 +611,16 @@ async function run3d(){
   function place(t){
     L.bricks.forEach((b, i) => {
       const p = Math.min(Math.max((t - b.start) / 0.75, 0), 1), e = bounce(p), spin = 1 - Math.min(p * 1.6, 1);
-      dummy.position.set(b.x + L.bw / 2, b.r * L.bh + L.bh / 2 + (1 - e) * (L.h + 240), -L.depth / 2 + (1 - Math.min(p * 1.25, 1)) * L.h * 0.3);
+      const vis = p > 0 ? 1 : 0.0001;
+      dummy.position.set(b.x + b.w / 2, b.r * L.bh + L.bh / 2 + (1 - e) * (L.h + 240), -L.depth / 2 + (1 - Math.min(p * 1.25, 1)) * L.h * 0.3);
       dummy.rotation.set(b.rx * spin, 0, b.rz * spin);
-      dummy.scale.setScalar(p > 0 ? 1 : 0.0001);
+      dummy.scale.set(vis * (b.w - 2) / L.su, vis, vis);
       dummy.updateMatrix(); boxes.setMatrixAt(i, dummy.matrix);
-      [-0.3, 0, 0.3].forEach((k, j) => {
-        local.makeTranslation(L.bw * k, L.bh / 2 + L.bh * 0.1 - 1, 0);
-        m.multiplyMatrices(dummy.matrix, local); studs.setMatrixAt(i * 3 + j, m);
-      });
+      dummy.scale.setScalar(vis); dummy.updateMatrix();          // studs ride the brick but are not stretched
+      for (let k = 0; k < b.n; k++) {
+        local.makeTranslation(L.su * (k + 0.5) - b.w / 2, L.bh / 2 + L.bh * 0.1 - 1, 0);
+        m.multiplyMatrices(dummy.matrix, local); studs.setMatrixAt(b.stud0 + k, m);
+      }
     });
     boxes.instanceMatrix.needsUpdate = true; studs.instanceMatrix.needsUpdate = true;
     renderer.render(scene, camera);

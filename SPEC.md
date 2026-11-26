@@ -84,7 +84,7 @@ Where this block disagrees with the rest of the spec, this block is newer. It su
 
 The user reviewed eight options in a review file, then set their own direction with the three images above. The final look is a blend:
 
-- Hero: an original three.js falling-brick wall (images 1 and 3), an original brick-built headline (image 2), Dot Pattern studs, the Toast Overshoot settle, and the hot-catfish-48 press on the CTA.
+- Hero: an original three.js falling-brick wall (images 1 and 3), an original brick-built headline (image 2), Dot Pattern studs, and the Toast Overshoot settle. The hot-catfish-48 tilt was dropped from the hero in the second pass (see "Hero, second pass" below); it is still used on buttons lower down the page.
 - Feature: an original manual layout (user's note), plus the hot-catfish-48 press on the CTA.
 
 **Hero behaviour as built**
@@ -95,13 +95,62 @@ The user reviewed eight options in a review file, then set their own direction w
 - No JavaScript: a static brick-pattern background with the hero visible.
 - `?wall=svg` or `?wall=3d` forces a mode.
 
+**Hero, second pass (2026-11-26, from the user's feedback on the built page)**
+
+Three more reference images were supplied in chat (not saved to the repo):
+
+| # | What is visible | What the user wants from it |
+|---|-----------------|-----------------------------|
+| 4 | Sketch over the wall: a box drawn in wireframe whose edges converge on a single point. | The panels' angle must match the bricks behind them. |
+| 5 | Colour markup over the headline. | Bricks coloured by length: singles red, 2-long blue, 3-long yellow, 5-long green. |
+| 6 | A second colour markup over E, F, I, X, I, T. | The exact bricks each letter is made from (table below). |
+
+User's feedback, verbatim:
+
+- "the buttons look like nothing compared to the blocks behind it. as with the panels that have the text on top. it needs to look like they are siiting on the bricks, like the panels are sitting on SNOT bricks behind them (not atually showing the side holes) and make the text align with the panels like i showed in the ealier screenshotnthat said 'LETS PLAY'."
+- "the angle of the panels doent match the angle of the bricks behind them."
+- "The single bricks are red, the two length bricks are blue, the three are yellow, and the five are green."
+- "have the buttons look like thicker blocks that get attatched to the board when you hover on them or click them."
+
+What was built:
+
+- **One stud grid.** One stud is `--u` (18px on desktop; 11 to 16px on phones, sized so 24 studs fit the width). The plates, every letter brick, the buttons and the text tile are sized and placed in whole studs by `buildHero()`, so everything sits exactly on the plate's studs.
+- **Shared perspective.** The three.js camera and a CSS `perspective` on the hero's `.stage` wrapper use the same 50 degree field of view and eye distance, with the vanishing point at the hero centre. Plates, letters, buttons and the tile are real CSS 3D boxes (a front face plus four side faces), so their sides converge on the same point as the wall bricks. The camera was 30 degrees in the first pass.
+- **Plates** stand 2 studs off the wall, as if mounted on sideways (SNOT) bricks, and cast a shadow onto it. They fly in from the viewer and land on the wall.
+- **Studs** are drawn as raised bumps with a highlight and a shadow.
+- **Headline bricks.** Colour by length: 1 stud red `#ed1c24`, 2 blue `#3f48cc`, 3 yellow `#fff200`, 5 green `#0ed145`. Each letter has an explicit brick layout in the `BRICKS` table in `index.html`:
+
+| Letter | Bricks |
+|--------|--------|
+| W | Two green 5-long uprights; three red singles between them. Not covered by the user's markup; kept from the earlier rule. |
+| E | Green 5-long upright; yellow 3-long top and bottom bars; two red singles for the middle bar. |
+| F | Green 5-long upright; yellow 3-long top bar; two red singles for the middle bar. |
+| I | Three yellow 3-longs: across the top, upright in the middle, across the bottom. |
+| X | Nine red singles. |
+| T | Green 5-long across the top; the stem is two blue 2-longs stacked (the markup drew one blue line 4 studs long). |
+
+  A letter with no layout falls back to red singles. Only W, E, F, I, X and T have glyphs so far.
+- **Buttons** are thick blocks (about 1.4 studs deep for the jump buttons, 1.7 for Book a repair) with a smooth printed centre and a column of studs at each end. At rest they float about 1.3 studs above the plate; on hover, keyboard focus or press they snap down onto the studs and their shadow tightens.
+- **Blurb** sits on a smooth white tile sized in whole studs.
+- **Wall bricks (third pass).** The user sketched rows of mixed-length bricks (image 7, supplied in chat) and asked: "how about we structure it so that it matches the lego text? we need to make sure though that all gaps are covered, but figure out how to keep it procedural." The wall now uses the headline's rule: bricks are 1, 2, 3 or 5 studs long and the length sets the colour. It is still random on every load:
+  - Each row is filled left to right with random lengths until it runs past the right edge, so there are never gaps; the end bricks hang off-screen.
+  - Each row starts up to two studs off the left edge, so rows do not share an edge.
+  - A length is re-rolled (up to eight tries) if the brick would end directly above a joint in the row below, which avoids straight vertical cracks.
+  - One wall stud is 43px on desktop and 29px on phones.
+  - Colour mix, set by the user as each colour's share of the wall surface: red 15%, blue 30%, yellow 30%, green 25% (`WALL_SHARE` in `index.html`). Odds per brick are derived as share divided by length, roughly red 33%, blue 33%, yellow 22%, green 11%. Shares are averages and vary a few points per load.
+  - The first pass used same-size bricks with weighted random colours (red 3, blue 2, yellow 1, green 1 in 7).
+  - The no-JavaScript fallback background still shows the first-pass same-size brick pattern.
+
+**Hero behaviour as built** (unchanged from the first pass except where noted above): 3D wall, SVG fallback, reduced motion, no-JavaScript fallback, and `?wall=` override all work as listed earlier. In SVG mode the wall is flat but the plates keep their 3D look.
+
 **Approval and files**
 
 - Preview approved by the user on 2026-11-26 ("Build final files").
-- `mockups/preview.html`: approved preview, with review-only Replay and mode buttons.
-- `mockups/hero.html`: final hero mockup.
-- `mockups/feature.html`: final repair services mockup.
-- The mockups need a local server (scripts do not run when the file is opened in the app's preview pane): `.claude/launch.json` serves `mockups/` on port 8137.
+- `index.html`: the home page (hero, repair services, classes, footer). This is the source of truth for the hero.
+- `mockups/hero.html`: hero mockup, regenerated from `index.html` after the second pass.
+- `mockups/feature.html`: repair services and classes mockup.
+- `mockups/preview.html`: the first-pass preview as originally approved, with review-only Replay and mode buttons. It still shows the flat first-pass hero and is kept as a record only.
+- The pages need a local server (scripts do not run when a file is opened in the app's preview pane): `.claude/launch.json` serves the repo root on port 8137.
 
 **Services and prices (from the current booking page, signup-u-teach.as.me, read 2026-11-26)**
 
@@ -136,6 +185,10 @@ Three testimonials exist, and `mockups/feature.html` now shows all three in full
 | Confirm the booking-page services and prices are current, and whether the "25% off" on the one-hour repair is permanent. | User |
 | The HTML class is not listed on the booking page yet (confirmed by the user, 2026-11-26). Needed: length, price, what it covers, who it is for, and a booking-page appointment to link to. The mockup shows a placeholder card. | User |
 | More repair reviews if any exist elsewhere (for example a Google Business profile); only one of the three is about repair. | User |
+| Confirm the E and F middle bars are ordinary red singles (the markup used a darker red there than on the X). | User |
+| Confirm the T stem as two blue 2-longs, or name a colour for a 4-long brick. | User |
+| Confirm the W layout, which the colour markup did not cover. | User |
+| Try the snap-on buttons on a touch screen, where there is no hover. | Builder |
 | Tune the weak-phone thresholds on a real cheap Android phone. | Builder |
 | Host three.js locally instead of loading it from a CDN. | Builder |
 | Contrast-check the doodle palette against WCAG 2.2 AA (white text on the green and red in particular). | Builder |
