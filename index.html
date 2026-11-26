@@ -47,37 +47,84 @@ a{color:inherit}
 .wall.still .row{animation:none}
 @keyframes row-drop{from{transform:translateY(-110vh)}to{transform:none}}
 
-.hero-ui{position:relative;z-index:1;width:min(100%,640px);display:grid;gap:22px;justify-items:center}
+.stage{position:relative;z-index:1;align-self:stretch;justify-self:stretch;display:grid;place-items:center;perspective:700px;perspective-origin:50% calc(50% + 8px)}
+.hero-ui{position:relative;display:grid;gap:30px;justify-items:center;--u:18px;transform-style:preserve-3d}
 .js .hero-ui{visibility:hidden}
 .built .hero-ui{visibility:visible}
-.plate{width:100%;background-color:var(--color-plate);border-radius:var(--radius-brick);
-  box-shadow:0 8px 0 var(--color-plate-dark),0 18px 30px rgba(0,0,0,.28);
-  padding:26px 22px;text-align:center;
+
+/* One stud per --u square. Every hero piece uses this, so studs, letters and buttons share a grid. */
+.studded{
   background-image:
-    radial-gradient(circle at 50% 44%, rgba(255,255,255,.2) 0 5px, transparent 6px),
-    radial-gradient(circle at 50% 50%, rgba(0,0,0,.14) 0 8px, transparent 9px);
-  background-size:28px 28px;background-position:center}
-.plate.info{width:92%}
-.built .plate{animation:plate-in .55s var(--settle) both}
+    radial-gradient(circle at 42% 40%, rgba(255,255,255,.55) 0 6%, transparent 22%),
+    radial-gradient(circle at 50% 50%, var(--face) 0 31%, transparent 33%),
+    radial-gradient(circle at 50% 54%, rgba(0,0,0,.42) 0 33%, transparent 40%);
+  background-size:var(--u) var(--u)}
+
+/* Box: a real 3D block. The front face stands --d in front of whatever it sits on, with four side faces
+   running back to it. The hero has the same perspective as the three.js camera, so these boxes and the
+   wall bricks share one vanishing point (the centre of the hero). */
+.box{transform-style:preserve-3d;transform:translateZ(var(--d))}
+.box > .side{position:absolute;pointer-events:none;background:var(--side)}
+.box > .side.t{left:0;top:0;width:100%;height:var(--d);transform-origin:50% 0;transform:rotateX(-90deg);background:color-mix(in srgb,var(--side) 78%,#fff)}
+.box > .side.b{left:0;bottom:0;width:100%;height:var(--d);transform-origin:50% 100%;transform:rotateX(90deg);background:color-mix(in srgb,var(--side) 80%,#000)}
+.box > .side.l{left:0;top:0;height:100%;width:var(--d);transform-origin:0 50%;transform:rotateY(90deg)}
+.box > .side.r{right:0;top:0;height:100%;width:var(--d);transform-origin:100% 50%;transform:rotateY(-90deg);background:color-mix(in srgb,var(--side) 88%,#000)}
+/* Shadow cast on the surface behind the box */
+.box > .cast{position:absolute;inset:0;pointer-events:none;transform:translateZ(calc(var(--d) * -1 + 1px));
+  background:rgba(0,0,0,.35);box-shadow:calc(var(--d) * .35) calc(var(--d) * .55) calc(var(--d) * .6) calc(var(--d) * .1) rgba(0,0,0,.5)}
+
+/* Plate: a baseplate standing off the wall, studs facing out. */
+.plate{--face:var(--color-plate);--side:var(--color-plate-dark);
+  position:relative;background-color:var(--face);padding:var(--u);text-align:center;
+  box-shadow:inset 1px 1px 0 rgba(255,255,255,.4),inset -1px -1px 0 rgba(0,0,0,.25)}
+.plate.grid{padding:0}
+.plate.grid h1,.plate.grid nav,.plate.grid ul,.plate.grid li{position:absolute;inset:0;margin:0;padding:0;transform-style:preserve-3d;pointer-events:none}
+.built .plate{animation:plate-in .6s var(--settle) both}
 .built .plate.info{animation-delay:.9s}
-@keyframes plate-in{from{transform:translateY(-40px) scale(.94);opacity:0}to{transform:none;opacity:1}}
+@keyframes plate-in{from{transform:translateZ(calc(var(--d) + 300px));visibility:hidden}1%{visibility:visible}to{transform:translateZ(var(--d));visibility:visible}}
 
-.hero h1{margin:0 0 18px;font-family:var(--font-heading);font-size:clamp(34px,7vw,60px);line-height:1.05}
-.brick-word{display:flex;flex-wrap:wrap;justify-content:center;gap:calc(var(--cell) * 1.2) calc(var(--cell) * 2.5);--cell:clamp(12px,2.1vw,15px)}
-.brick-word .word{display:flex;gap:var(--cell)}
-.brick-word .glyph{display:grid;grid-auto-rows:var(--cell)}
-.brick-word .cell{width:var(--cell);height:var(--cell)}
-.brick-word .on{background-color:var(--c);
-  background-image:radial-gradient(circle at 50% 45%, rgba(255,255,255,.45) 0 22%, rgba(0,0,0,.22) 23% 38%, transparent 40%);
-  box-shadow:inset 0 0 0 1px rgba(0,0,0,.28)}
-.built .brick-word .on{animation:cell-in .32s var(--settle) both;animation-delay:calc(.35s + var(--n) * 9ms)}
+.hero h1{margin:0 0 var(--u);font-family:var(--font-heading);font-size:clamp(34px,7vw,60px);line-height:1.05}
+/* Headline: letters are built from bricks 1, 2, 3 and 5 studs long, each sitting on the plate's studs. */
+.brick-word{position:absolute;inset:0;display:grid;grid-auto-rows:var(--u);pointer-events:none;transform:translateZ(var(--lift))}
+.brick-word .on{--face:var(--c);background-color:var(--c);box-shadow:inset 0 0 0 1px rgba(0,0,0,.22),inset 1px 1px 0 rgba(255,255,255,.45)}
+.built .brick-word .on{animation:cell-in .32s var(--settle) both;animation-delay:calc(.35s + var(--n) * 30ms)}
 @keyframes cell-in{from{transform:translateY(-18px) scale(.4);opacity:0}to{transform:none;opacity:1}}
+/* The sides of the letter bricks: stacked slices of the headline's footprint */
+.word-layer{position:absolute;inset:0;pointer-events:none;background-repeat:no-repeat}
+.built .word-layer{animation:fade-in .35s 1.9s both}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
 
-.jump{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:0;padding:0;list-style:none}
-.jump a{display:inline-block;font-weight:700;text-decoration:none;padding:10px 18px;min-height:44px;border-radius:var(--radius-brick);
-  background:var(--color-paper);border:2px solid var(--color-ink);box-shadow:0 4px 0 var(--color-ink)}
-.jump a:hover{transform:translateY(2px);box-shadow:0 2px 0 var(--color-ink)}
-.plate.info p{margin:0 auto 20px;max-width:42ch;font-size:18px;font-weight:600;background:var(--color-paper);border:2px solid var(--color-ink);border-radius:var(--radius-brick);padding:12px 16px}
+.jump{display:flex;flex-wrap:wrap;gap:var(--u);justify-content:center;margin:0;padding:0;list-style:none}
+
+/* Button: a brick on the plate. Smooth printed centre, a column of studs at each end. */
+.brick-btn{--face:var(--color-paper);--side:#b9b9b9;
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+  min-height:calc(var(--u) * 2);padding:0 calc(var(--u) * 1.5);
+  font:700 15px/1.1 var(--font-body);color:var(--color-ink);text-decoration:none;
+  background-color:var(--face);pointer-events:auto;
+  box-shadow:inset 1px 1px 0 rgba(255,255,255,.7),inset 0 0 0 1px rgba(0,0,0,.2);
+  transition:transform .12s}
+.brick-btn::before,.brick-btn::after{content:"";position:absolute;top:0;bottom:0;width:var(--u);
+  background-image:
+    radial-gradient(circle at 42% 40%, rgba(255,255,255,.7) 0 6%, transparent 22%),
+    radial-gradient(circle at 50% 50%, var(--face) 0 31%, transparent 33%),
+    radial-gradient(circle at 50% 54%, rgba(0,0,0,.42) 0 33%, transparent 40%);
+  background-size:var(--u) var(--u)}
+.brick-btn::before{left:0}
+.brick-btn::after{right:0}
+.brick-btn.box:hover{transform:translateZ(calc(var(--d) * .6))}
+.brick-btn.box:active{transform:translateZ(calc(var(--d) * .15))}
+.brick-btn:focus-visible{outline:3px solid var(--color-ink);outline-offset:3px}
+.brick-btn.cta{--face:var(--color-yellow);--side:var(--color-yellow-dark);font-size:19px;min-height:calc(var(--u) * 3)}
+
+/* Tile: a smooth printed tile for running text. */
+.tile{--side:#b9b9b9;margin:0 0 var(--u);padding:calc(var(--u) * .6) var(--u);font-size:17px;font-weight:600;line-height:1.4;
+  background:var(--color-paper);display:flex;align-items:center;justify-content:center;pointer-events:auto;
+  box-shadow:inset 1px 1px 0 #fff,inset 0 0 0 1px rgba(0,0,0,.2)}
+.plate.grid .brick-btn,.plate.grid .tile{position:absolute;margin:0;min-height:0;padding-top:0;padding-bottom:0}
+.small .tile{font-size:15px}
+.small .brick-btn{font-size:14px}
+.small .brick-btn.cta{font-size:17px}
 
 /* CTA: hot-catfish-48 tilt-and-press, glow removed */
 .press{display:inline-block;font:700 19px var(--font-body);text-decoration:none;padding:.9em 2.2em;cursor:pointer;color:var(--color-ink);
@@ -149,8 +196,8 @@ h3.sub{font-family:var(--font-heading);font-size:24px;line-height:1.15;margin:40
 
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
-  .wall .row,.built .plate,.built .brick-word .on{animation:none}
-  .press,.jump a{transition:none}
+  .wall .row,.built .plate,.built .brick-word .on,.built .word-layer{animation:none}
+  .press,.brick-btn{transition:none}
   .press:hover,.press:active{transform:perspective(220px) rotateX(12deg)}
 }
 </style>
@@ -160,20 +207,22 @@ h3.sub{font-family:var(--font-heading);font-size:24px;line-height:1.15;margin:40
 <header class="hero" id="top">
   <div class="wall" id="wall" aria-hidden="true"></div>
 
-  <div class="hero-ui">
-    <div class="plate">
+  <div class="stage">
+  <div class="hero-ui" id="hero-ui">
+    <div class="plate studded" id="plate-title">
       <h1 id="hero-title"><span id="hero-text">We fix it.</span><span class="brick-word" id="brick-word" aria-hidden="true"></span></h1>
       <nav aria-label="Jump to a section">
         <ul class="jump">
-          <li><a href="#repairs">Repair services</a></li>
-          <li><a href="#classes">HTML classes</a></li>
+          <li><a class="brick-btn" href="#repairs">Repair services</a></li>
+          <li><a class="brick-btn" href="#classes">HTML classes</a></li>
         </ul>
       </nav>
     </div>
-    <div class="plate info">
-      <p>Computer acting up? Our technicians find the problem and get your device running smoothly again.</p>
-      <a class="press" href="#book">Book a repair</a>
+    <div class="plate studded info" id="plate-info">
+      <p class="tile">Computer acting up? Our technicians find the problem and get your device running smoothly again.</p>
+      <a class="brick-btn cta" href="#book">Book a repair</a>
     </div>
+  </div>
   </div>
 
   <div class="controls">
@@ -312,32 +361,134 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const params = new URLSearchParams(location.search);
 root.classList.add('js');
 
-/* ---------- headline built from bricks (image 2) ---------- */
+/* ---------- hero pieces on one stud grid, as 3D boxes under the wall camera ---------- */
+const FOV = 50;                                    // shared by the three.js camera and the CSS perspective
+const camDist = h => (h / 2) / Math.tan(FOV / 2 * Math.PI / 180);
 const GLYPHS = {
   W:['10001','10001','10101','11011','10001'], E:['1111','1000','1110','1000','1111'],
   F:['1111','1000','1110','1000','1000'],      I:['111','010','010','010','111'],
   X:['10001','01010','00100','01010','10001'], T:['11111','00100','00100','00100','00100']
 };
-(function buildHeadline(){
-  const text = 'WE FIX IT';
-  const colors = ['#fff200','#ed1c24','#0ed145','#3f48cc','#ffffff'];
-  const host = document.getElementById('brick-word');
-  let n = 0, letter = 0, html = '';
-  for (const word of text.split(' ')) {
-    html += '<span class="word">';
-    for (const ch of word) {
-      const g = GLYPHS[ch]; if (!g) continue;
-      const c = colors[letter++ % colors.length];
-      html += `<span class="glyph" style="grid-template-columns:repeat(${g[0].length},var(--cell));--c:${c}">`;
-      for (const row of g) for (const bit of row)
-        html += bit === '1' ? `<span class="cell on" style="--n:${n++}"></span>` : '<span class="cell"></span>';
-      html += '</span>';
+const HEADLINE = 'WE FIX IT';
+// Brick colour by length: 1 stud red, 2 blue, 3 yellow, 5 green.
+const BRICK_COLORS = { 1: '#ed1c24', 2: '#3f48cc', 3: '#fff200', 5: '#0ed145' };
+// How each letter is laid in bricks, as [column, row, width, height] in studs. From the owner's markup.
+const BRICKS = {
+  W: [[0,0,1,5],[4,0,1,5],[2,2,1,1],[1,3,1,1],[3,3,1,1]],
+  E: [[0,0,1,5],[1,0,3,1],[1,2,1,1],[2,2,1,1],[1,4,3,1]],
+  F: [[0,0,1,5],[1,0,3,1],[1,2,1,1],[2,2,1,1]],
+  I: [[0,0,3,1],[1,1,1,3],[0,4,3,1]],
+  T: [[0,0,5,1],[2,1,1,2],[2,3,1,2]]
+};
+// Letters without a layout (X, and any new letter) are laid as single studs.
+function bricksOf(ch){
+  if (BRICKS[ch]) return BRICKS[ch].map(([c, r, w, h]) => ({ c, r, w, h }));
+  const out = [];
+  GLYPHS[ch].forEach((row, r) => [...row].forEach((bit, c) => { if (bit === '1') out.push({ c, r, w: 1, h: 1 }); }));
+  return out;
+}
+const darken = (hex, f) => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * f).toString(16).padStart(2, '0')).join('');
+// Turn an element into a 3D box standing `depth` px proud of its parent surface.
+function box(el, depth){
+  el.classList.add('box');
+  el.style.setProperty('--d', depth + 'px');
+  if (!el.querySelector(':scope > .side'))
+    for (const c of ['cast', 'side t', 'side b', 'side l', 'side r']) {
+      const f = document.createElement('span'); f.className = c; f.setAttribute('aria-hidden', 'true'); el.appendChild(f);
     }
-    html += '</span>';
+}
+let heroKey = '';
+function buildHero(){
+  const ui = document.getElementById('hero-ui');
+  // Same eye distance as the wall camera; the vanishing point is the centre of the hero.
+  ui.parentElement.style.perspective = camDist(wall.clientHeight) + 'px';
+  const vw = document.documentElement.clientWidth, small = vw < 640;
+  // u = one stud. Everything below is placed in whole studs, so it lines up with the plate.
+  const u = small ? Math.max(11, Math.min(16, Math.floor((vw - 28) / 24))) : 18;
+  const cols = small ? Math.floor((vw - 28) / u) : Math.min(41, Math.floor((vw - 64) / u));
+  if (heroKey === u + ':' + cols) return;
+  heroKey = u + ':' + cols;
+  ui.style.setProperty('--u', u + 'px');
+  ui.classList.toggle('small', small);
+  const px = n => n * u + 'px';
+  const put = (el, x, y, w, h) => Object.assign(el.style, { left: px(x), top: px(y), width: px(w), height: px(h) });
+  const standoff = u * 2, lift = Math.round(u * 0.7), btnDepth = Math.round(u * 0.8);
+
+  /* plate 1: headline + jump buttons */
+  const plate = document.getElementById('plate-title');
+  const words = HEADLINE.split(' ').map(w => [...w].filter(ch => GLYPHS[ch]));
+  const width = w => w.reduce((n, ch) => n + GLYPHS[ch][0].length, 0) + w.length - 1;
+  const inner = cols - 2, lines = [];
+  for (const w of words) {
+    const last = lines[lines.length - 1];
+    if (last && last.w + 2 + width(w) <= inner) { last.words.push(w); last.w += 2 + width(w); }
+    else lines.push({ words: [w], w: width(w) });
   }
-  host.innerHTML = html;
+  let html = '', rects = '', y = 1, n = 0;
+  for (const line of lines) {
+    let x = 1 + Math.floor((inner - line.w) / 2);
+    for (const w of line.words) {
+      for (const ch of w) {
+        const g = GLYPHS[ch];
+        for (const b of bricksOf(ch)) {
+          const c = BRICK_COLORS[Math.max(b.w, b.h)] || BRICK_COLORS[1], dark = darken(c, 0.55);
+          html += `<span class="on studded" style="grid-column:${x + b.c + 1} / span ${b.w};grid-row:${y + b.r + 1} / span ${b.h};--c:${c};--n:${n++}"></span>`;
+          rects += `<rect x="${(x + b.c) * u}" y="${(y + b.r) * u}" width="${b.w * u}" height="${b.h * u}" fill="${dark}"/>`;
+        }
+        x += g[0].length + 1;
+      }
+      x += 1;
+    }
+    y += 6;
+  }
+  const word = document.getElementById('brick-word'), h1 = word.parentElement;
+  word.style.gridTemplateColumns = `repeat(${cols}, ${u}px)`;
+  word.style.setProperty('--lift', lift + 'px');
+  word.innerHTML = html;
   document.getElementById('hero-text').className = 'sr-only';
-})();
+  // Letter sides: the footprint drawn once as an image, stacked in slices from the plate up to the letter tops
+  h1.querySelectorAll('.word-layer').forEach(e => e.remove());
+  const footprint = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${cols * u}" height="${y * u}">${rects}</svg>`)}")`;
+  for (let z = 0; z < lift; z += 2) {
+    const layer = document.createElement('span');
+    layer.className = 'word-layer'; layer.setAttribute('aria-hidden', 'true');
+    layer.style.backgroundImage = footprint; layer.style.transform = `translateZ(${z}px)`;
+    h1.insertBefore(layer, word);
+  }
+
+  y += 1;
+  const jumps = [...plate.querySelectorAll('.brick-btn')];
+  const bw = Math.min(inner, small ? 13 : 11);
+  if (jumps.length * bw + (jumps.length - 1) <= inner) {
+    let x = Math.floor((cols - (jumps.length * bw + jumps.length - 1)) / 2);
+    jumps.forEach(a => { put(a, x, y, bw, 2); x += bw + 1; });
+    y += 2;
+  } else {
+    jumps.forEach(a => { put(a, Math.floor((cols - bw) / 2), y, bw, 2); y += 3; });
+    y -= 1;
+  }
+  jumps.forEach(a => box(a, btnDepth));
+  plate.classList.add('grid');
+  plate.style.width = px(cols); plate.style.height = px(y + 1);
+  box(plate, standoff);
+
+  /* plate 2: text tile + main button */
+  const info = document.getElementById('plate-info'), cols2 = small ? cols : cols - 4;
+  const tile = info.querySelector('.tile'), cta = info.querySelector('.cta');
+  info.classList.add('grid');
+  info.style.width = px(cols2);
+  Object.assign(tile.style, { left: px(1), top: px(1), width: px(cols2 - 2), height: 'auto' });
+  const k = Math.max(2, Math.ceil((tile.offsetHeight + u * 0.6) / u));
+  tile.style.height = px(k);
+  const cw = Math.min(cols2 - 4, 14);
+  put(cta, Math.floor((cols2 - cw) / 2), 1 + k + 1, cw, 3);
+  info.style.height = px(1 + k + 1 + 3 + 1);
+  box(tile, 5); box(cta, btnDepth + 2); box(info, standoff);
+}
+buildHero();
+document.fonts && document.fonts.ready.then(() => { heroKey = ''; buildHero(); });
+let heroTimer = 0;
+addEventListener('resize', () => { clearTimeout(heroTimer); heroTimer = setTimeout(buildHero, 150); });
 
 /* ---------- shared wall layout: running-bond rows, bottom row first ---------- */
 function layout(w, h){
@@ -387,7 +538,7 @@ async function run3d(){
   const scene = new THREE.Scene();
   scene.add(new THREE.HemisphereLight(0xffffff, 0x9a9a9a, 2.2));
   const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(-0.5, 0.9, 1); scene.add(sun);
-  const camera = new THREE.PerspectiveCamera(30, 1, 10, 10000);
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 10, 10000);
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.38, metalness: 0 });
   const dummy = new THREE.Object3D(), m = new THREE.Matrix4(), local = new THREE.Matrix4(), col = new THREE.Color();
 
@@ -397,7 +548,7 @@ async function run3d(){
     const w = wall.clientWidth, h = wall.clientHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    const dist = (h / 2) / Math.tan(THREE.MathUtils.degToRad(15));   // 1 world unit = 1 CSS pixel at z = 0
+    const dist = camDist(h);   // 1 world unit = 1 CSS pixel at z = 0
     camera.position.set(w / 2, h / 2, dist); camera.lookAt(w / 2, h / 2, 0); camera.updateProjectionMatrix();
     if (boxes) { scene.remove(boxes, studs); boxes.geometry.dispose(); studs.geometry.dispose(); }
     L = layout(w, h); L.h = h; L.depth = L.bh * 0.9;
@@ -425,7 +576,7 @@ async function run3d(){
   function place(t){
     L.bricks.forEach((b, i) => {
       const p = Math.min(Math.max((t - b.start) / 0.75, 0), 1), e = bounce(p), spin = 1 - Math.min(p * 1.6, 1);
-      dummy.position.set(b.x + L.bw / 2, b.r * L.bh + L.bh / 2 + (1 - e) * (L.h + 240), -L.depth / 2 + (1 - Math.min(p * 1.25, 1)) * 260);
+      dummy.position.set(b.x + L.bw / 2, b.r * L.bh + L.bh / 2 + (1 - e) * (L.h + 240), -L.depth / 2 + (1 - Math.min(p * 1.25, 1)) * L.h * 0.3);
       dummy.rotation.set(b.rx * spin, 0, b.rz * spin);
       dummy.scale.setScalar(p > 0 ? 1 : 0.0001);
       dummy.updateMatrix(); boxes.setMatrixAt(i, dummy.matrix);
