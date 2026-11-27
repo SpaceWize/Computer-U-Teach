@@ -619,18 +619,34 @@ function runSvg(animate){
 }
 
 /* ---------- the city: a procedural brick town the visitor can explore (js/city.js) ---------- */
-const CITY_VERSION = '4';                                   // raise when js/city.js changes, so browsers fetch it
+const CITY_VERSION = '7';                                   // raise when js/city.js changes, so browsers fetch it
 const hero = document.querySelector('.hero');
 let city = null;
-async function runCity(){
+/* Weather is picked inside js/city.js. ?weather=clear|sun|rain|snow|tech forces one. */
+async function runCity(weather = params.get('weather'), seed = params.get('city')){
   const { startCity } = await import('./js/city.js?v=' + CITY_VERSION);
   wall.innerHTML = ''; wall.classList.remove('still');
-  city = await startCity({ container: wall, reduced, onBuilt: reveal, seed: params.get('city') });
+  city = await startCity({ container: wall, reduced, onBuilt: reveal, seed, weather });
   hero.classList.add('has-city');
+  hero.dataset.weather = city.weather;
   if (matchMedia('(pointer: coarse)').matches) document.getElementById('city-hint').textContent = 'Use two fingers to move the city.';
   finish = () => { city.finish(); reveal(); };
   stop = () => { city.stop(); city = null; hero.classList.remove('has-city'); };
 }
+/* The easter egg: type "tech" anywhere on the page (not in a text box) and the same city is rebuilt
+   as the futuristic one. Type it again to go back. */
+let typed = '';
+addEventListener('keydown', e => {
+  if (!city || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  typed = (typed + e.key.toLowerCase()).slice(-4);
+  if (typed !== 'tech') return;
+  typed = '';
+  const next = city.weather === 'tech' ? 'clear' : 'tech', seed = city.seed;
+  stop(); stop = () => {};
+  runCity(next, seed).catch(err => console.warn('Could not rebuild the city', err));
+});
 for (const [id, act] of [['turn-left', c => c.turn(-0.35)], ['turn-right', c => c.turn(0.35)], ['zoom-in', c => c.zoom(0.7)],
   ['zoom-out', c => c.zoom(1.45)], ['view-reset', c => c.reset()]])
   document.getElementById(id).addEventListener('click', () => city && act(city));

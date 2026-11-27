@@ -1,8 +1,6 @@
 // A small procedural brick city for the hero. Different on every load.
 //
-// The city is a square of blocks and roads. Around it is a ring of wheat fields, crops, pasture and
-// farmsteads, and beyond that plain ground fading into the sky, so a small square reads as a whole
-// world. Visitors can drag to orbit, zoom right down to the cars, and pan.
+// The city is a square of blocks and roads on open green ground with trees, fading into the sky. Visitors can drag to orbit, zoom right down to the cars, and pan.
 //
 // Units: 1 = one stud. Y is up. Everything is drawn with a handful of instanced meshes (one box, one
 // cylinder, one cone, one roof prism), so thousands of pieces cost a few draw calls.
@@ -12,7 +10,6 @@
 
 const BLOCK = 16, ROAD = 6, N = 6, PITCH = BLOCK + ROAD;
 const HALF = (N * BLOCK + (N + 1) * ROAD) / 2;          // half the city's width
-const FIELD = 46, FIELD_SIZE = 38, FARM_REACH = 230;
 
 const C = {
   sky: '#bfe3ff', grass: '#6cc24a', grassDark: '#4fa83a', lawn: '#7fd257',
@@ -26,7 +23,51 @@ const WALLS = ['#f4f1e8', '#e9e2cf', '#d8dde3', '#ed1c24', '#3f48cc', '#fff200',
 const CARS = ['#ed1c24', '#3f48cc', '#fff200', '#0ed145', '#ffffff', '#f28c28', '#1b1b1b', '#00a8f3'];
 const ROOFS = ['#b23a48', '#6b7078', '#7a4a21', '#3f48cc'];
 
-export async function startCity({ container, reduced = false, onBuilt = () => {}, seed } = {}) {
+/* ---------- weather ----------
+   Each look changes the sky, the light and some colours, and may add falling rain or snow.
+   map: colours to swap, by name from C. kinds: every piece of that shape takes one colour. */
+const SNOW = '#f4f7fa';
+const LOOKS = {
+  clear: { sky: '#bfe3ff', fog: [420, 1150], hemi: ['#dff1ff', '#8f8a63', 1.5], sun: ['#fff3dc', 2.4], map: {} },
+  /* Sunny: a deep blue sky fading to a pale horizon, hard warm light with darker shadows, saturated
+     colours, and the shadows of high clouds sweeping across the city. */
+  sun: { sky: '#cdeeff', skyTop: '#2f8fff', fog: [600, 1500], hemi: ['#d8efff', '#7d8f4a', 1.05], sun: ['#ffe0a0', 3.7], cloudShadows: true,
+    map: { grass: '#6fd23e', grassDark: '#55b832', lawn: '#82e04c', pasture: '#93dc5e', wheat: '#ffcc1f', wheatSoil: '#e8c25a',
+      water: '#1fb2ff', leafLight: '#4fd04f', leaf: '#21a83a', pavement: '#dde1e6' } },
+  rain: { sky: '#8e9aa8', fog: [200, 820], hemi: ['#c9d3de', '#5f6b5a', 1.25], sun: ['#dfe8f2', 0.95], particles: 'rain', puddles: true,
+    map: { grass: '#57a03c', grassDark: '#46883a', lawn: '#62ad46', pasture: '#73b357', road: '#2f3239', asphalt: '#292c32',
+      pavement: '#a3a9b1', wheatSoil: '#bf9f48', wheat: '#d6a92a', soil: '#6e4622', soilLight: '#7f5329' } },
+  snow: { sky: '#d3dce6', fog: [280, 950], hemi: ['#eef4ff', '#b3bdc8', 1.6], sun: ['#f3f6ff', 1.7], particles: 'snow', snowCaps: true,
+    map: { grass: SNOW, grassDark: '#e8eef3', lawn: SNOW, pasture: SNOW, wheatSoil: SNOW, soil: '#e3e9ee', soilLight: '#e3e9ee', crop: '#dbe3ea',
+      wheat: '#eef2f6', leafLight: '#dfe8ec', hay: '#f0f3f6', pavement: '#e6ebf0', water: '#c7e3f3', road: '#5d616a' },
+    kinds: { pyramid: SNOW, roof: SNOW } },
+  /* The easter egg: the same city at night, built from dark tech parts with glowing windows and lines. */
+  tech: { sky: '#060a18', fog: [380, 1100], hemi: ['#4a6cff', '#05070f', 0.55], sun: ['#9fb6ff', 0.7], stars: true, grid: true, neonRims: true,
+    glow: ['line'], litGlass: true,
+    map: { grass: '#0b1224', grassDark: '#0b1224', lawn: '#0f1a30', pasture: '#0f1a30', wheatSoil: '#0b1224', soil: '#0b1224', soilLight: '#0b1224',
+      road: '#090d1a', asphalt: '#090d1a', pavement: '#18203a', line: '#29f0ff', glassDark: '#04060d', tyre: '#04060d', trunk: '#2a3350',
+      leaf: '#1df2a0', leafLight: '#14c98a', water: '#29f0ff', wheat: '#ff3df2', crop: '#7a5cff', barn: '#ff3df2', roof: '#2a3350',
+      white: '#cfe8ff', silo: '#2a3350', hay: '#7a5cff', tractor: '#29f0ff' },
+    walls: ['#141a2b', '#1c2438', '#232c44', '#0f1422', '#2a3350'],
+    neon: ['#29f0ff', '#ff3df2', '#ffb020', '#1df2a0', '#7a5cff'],
+    windows: ['#29f0ff', '#ff3df2', '#ffb020', '#29f0ff', '#1b2440', '#1b2440'] }
+};
+export const WEATHERS = Object.keys(LOOKS);
+
+/* Plain weather most of the time. When there is weather, the one that suits the season (Vancouver,
+   northern hemisphere) comes up three times as often as each of the others. The tech city is a rare
+   easter egg. */
+const TECH_CHANCE = 1 / 40, CLEAR_CHANCE = 0.55;
+const seasonWeather = month => ([11, 0, 1].includes(month) ? 'snow' : [5, 6, 7].includes(month) ? 'sun' : 'rain');
+export function pickWeather(date = new Date(), r = Math.random) {
+  if (r() < TECH_CHANCE) return 'tech';
+  if (r() < CLEAR_CHANCE) return 'clear';
+  const inSeason = seasonWeather(date.getMonth()), others = ['rain', 'snow', 'sun'].filter(w => w !== inSeason);
+  const x = r();
+  return x < 0.6 ? inSeason : x < 0.8 ? others[0] : others[1];
+}
+
+export async function startCity({ container, reduced = false, onBuilt = () => {}, seed, weather } = {}) {
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
 
@@ -38,6 +79,21 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   const whole = (a, b) => Math.floor(between(a, b + 1));
   const pick = list => list[Math.floor(rand() * list.length)];
 
+  /* The weather's own random picks use Math.random, so a given seed builds the same streets in any weather. */
+  const weatherName = LOOKS[weather] ? weather : pickWeather();
+  const look = LOOKS[weatherName], anyPick = list => list[Math.floor(Math.random() * list.length)];
+  const colourMap = {};
+  for (const [name, to] of Object.entries(look.map)) colourMap[C[name]] = to;
+  const glowSet = new Set((look.glow || []).map(n => C[n]));
+  /* kind 'paint' is cars and people; everything else is scenery */
+  function recolor(c, kind) {
+    if (look.kinds && look.kinds[kind]) return look.kinds[kind];
+    if (look.litGlass && c === C.glass) return anyPick(look.windows);
+    if (colourMap[c]) return colourMap[c];
+    if (weatherName === 'tech') return anyPick(kind === 'paint' ? look.neon : look.walls);
+    return c;
+  }
+
   /* ---------- renderer, scene, light ---------- */
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
@@ -47,10 +103,19 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   container.appendChild(canvas);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(C.sky);
-  scene.fog = new THREE.Fog(C.sky, 420, 1150);
-  scene.add(new THREE.HemisphereLight(0xdff1ff, 0x8f8a63, 1.5));
-  const sun = new THREE.DirectionalLight(0xfff3dc, 2.4);
+  scene.background = new THREE.Color(look.sky);
+  let skyTexture = null;
+  if (look.skyTop) {                                     // a sky that is deep blue overhead and pale at the horizon
+    const c = document.createElement('canvas'); c.width = 2; c.height = 256;
+    const g = c.getContext('2d'), grad = g.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, look.skyTop); grad.addColorStop(0.75, look.sky); grad.addColorStop(1, look.sky);
+    g.fillStyle = grad; g.fillRect(0, 0, 2, 256);
+    skyTexture = new THREE.CanvasTexture(c); skyTexture.colorSpace = THREE.SRGBColorSpace;
+    scene.background = skyTexture;
+  }
+  scene.fog = new THREE.Fog(look.sky, look.fog[0], look.fog[1]);
+  scene.add(new THREE.HemisphereLight(look.hemi[0], look.hemi[1], look.hemi[2]));
+  const sun = new THREE.DirectionalLight(look.sun[0], look.sun[1]);
   sun.position.set(130, 230, 90);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -60,7 +125,8 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
 
   /* ---------- pieces: collected first, then turned into instanced meshes ---------- */
   const solid = new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0 });
-  const glass = new THREE.MeshStandardMaterial({ roughness: 0.12, metalness: 0.25 });
+  const glass = look.litGlass ? new THREE.MeshBasicMaterial() : new THREE.MeshStandardMaterial({ roughness: 0.12, metalness: 0.25 });
+  const glowMat = new THREE.MeshBasicMaterial();         // unlit: shows its colour at full strength
   const roofGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 3); roofGeo.rotateX(-Math.PI / 2);      // ridge along Z, apex up
   const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 12); wheelGeo.rotateZ(Math.PI / 2);   // axle along X
   const kinds = {
@@ -72,11 +138,14 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     pyramid: { geo: new THREE.ConeGeometry(0.7071, 1, 4, 1, false, Math.PI / 4), mat: solid, items: [] },
     wheat: { geo: new THREE.ConeGeometry(0.5, 1, 5), mat: solid, items: [] },
     roof: { geo: roofGeo, mat: solid, items: [] },
-    wheel: { geo: wheelGeo, mat: solid, items: [] }
+    wheel: { geo: wheelGeo, mat: solid, items: [] },
+    glow: { geo: new THREE.BoxGeometry(1, 1, 1), mat: glowMat, items: [] }
   };
   const UP = new THREE.Vector3(0, 1, 0), mx = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
   // Every piece is placed by the centre of its base. group ties it to a building so it can rise with it.
   function put(kind, x, y, z, sx, sy, sz, color, group = -1, turn = 0) {
+    if (kind === 'box' && glowSet.has(color)) kind = 'glow';
+    color = recolor(color, kind);
     q.setFromAxisAngle(UP, turn);
     kinds[kind].items.push({ m: new THREE.Matrix4().compose(p.set(x, y + sy / 2, z), q, sc.set(sx, sy, sz)), c: color, g: group });
   }
@@ -88,7 +157,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   function ridge(x, y, z, w, h, len, color, g, turn = 0) {
     q.setFromAxisAngle(UP, turn);
     const sy = h / 0.75;
-    kinds.roof.items.push({ m: new THREE.Matrix4().compose(p.set(x, y + 0.25 * sy, z), q, sc.set(w / 0.866, sy, len)), c: color, g });
+    kinds.roof.items.push({ m: new THREE.Matrix4().compose(p.set(x, y + 0.25 * sy, z), q, sc.set(w / 0.866, sy, len)), c: recolor(color, 'roof'), g });
   }
 
   const groups = [];                                     // one per building: when it starts to rise
@@ -100,6 +169,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     if (rand() < 0.5) {                                  // pine
       cone(x, y + 1.3 * size, z, 1.5 * size, 2.3 * size, C.leaf, g);
       cone(x, y + 2.6 * size, z, 1.1 * size, 1.9 * size, C.leaf, g);
+      if (look.snowCaps) cone(x, y + 3.55 * size, z, 0.72 * size, 0.95 * size, SNOW, g);
     } else {                                             // round
       cyl(x, y + 1.4 * size, z, 1.4 * size, 1.1 * size, C.leafLight, g);
       cyl(x, y + 2.5 * size, z, 1.0 * size, 0.9 * size, C.leafLight, g);
@@ -117,7 +187,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   /* ---------- ground and roads ---------- */
   box(0, -1.2, 0, 2600, 1.2, 2600, C.grass);
   box(0, 0, 0, HALF * 2, 0.2, HALF * 2, C.road);                               // the city sits on its roads
-  for (const s of [-1, 1]) {                                                    // two roads run on out through the farms
+  for (const s of [-1, 1]) {                                                    // two roads run on out to the horizon
     box(0, 0, s * (HALF + 340), ROAD, 0.2, 680, C.road);
     box(s * (HALF + 340), 0, 0, 680, 0.2, ROAD, C.road);
   }
@@ -131,11 +201,21 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     }
   }
 
+  if (look.puddles) for (let i = 0; i < 70; i++) {
+    const line = roadLines[Math.floor(Math.random() * roadLines.length)], along = (Math.random() - 0.5) * HALF * 2;
+    const r = 0.7 + Math.random() * 1.2, across = (Math.random() - 0.5) * 3;
+    Math.random() < 0.5 ? cyl(line + across, 0.2, along, r, 0.03, '#8ea3b6') : cyl(along, 0.2, line + across, r, 0.03, '#8ea3b6');
+  }
+
   /* ---------- buildings ---------- */
   const TOP = 0.55;                                      // top of the pavement
   function roofTop(x, y, z, w, d, wall, g, tall) {
     const step = w * d > 70 ? 2 : 1;
-    for (let a = 0.5; a < w; a += step) for (let b = 0.5; b < d; b += step) stud(x - w / 2 + a, y, z - d / 2 + b, wall, g);
+    if (look.snowCaps) { box(x, y, z, w, 0.4, d, SNOW, g); y += 0.4; }                 // snow covers the studs
+    else for (let a = 0.5; a < w; a += step) for (let b = 0.5; b < d; b += step) stud(x - w / 2 + a, y, z - d / 2 + b, wall, g);
+    if (look.neonRims) {
+      for (const s of [-1, 1]) { box(x, y, z + s * (d / 2 - 0.08), w, 0.16, 0.16, C.line, g); box(x + s * (w / 2 - 0.08), y, z, 0.16, 0.16, d, C.line, g); }
+    }
     const r = rand();
     if (r < 0.25) { cyl(x + between(-1, 1), y, z + between(-1, 1), 1.0, 1.6, C.silo, g); }                    // water tank
     else if (r < 0.5) { box(x + between(-1, 1), y, z + between(-1, 1), 1.8, 0.9, 1.4, C.roof, g); }           // air conditioner
@@ -221,50 +301,10 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     }
   }
 
-  /* ---------- the farms around the city ---------- */
-  function wheatField(x, z) {
-    box(x, 0, z, FIELD_SIZE, 0.25, FIELD_SIZE, C.wheatSoil);
-    for (let a = -17.5; a <= 17.5; a += 2.4) for (let b = -17.5; b <= 17.5; b += 2.4)
-      put('wheat', x + a + between(-0.5, 0.5), 0.25, z + b + between(-0.5, 0.5), 0.7, between(1.5, 2.3), 0.7, C.wheat);
-  }
-  function cropField(x, z, soil, row, turn) {
-    box(x, 0, z, FIELD_SIZE, 0.25, FIELD_SIZE, soil);
-    for (let a = -17; a <= 17; a += 2.6) turn ? box(x, 0.25, z + a, FIELD_SIZE - 2, 0.6, 1.0, row) : box(x + a, 0.25, z, 1.0, 0.6, FIELD_SIZE - 2, row);
-  }
-  function pasture(x, z) {
-    box(x, 0, z, FIELD_SIZE, 0.25, FIELD_SIZE, C.pasture);
-    for (let i = whole(4, 8); i > 0; i--) put('wheel', x + between(-15, 15), 0.25, z + between(-15, 15), 1.7, 1.9, 1.9, C.hay, -1, between(0, 3));
-    for (let i = whole(3, 6); i > 0; i--) {                // cows
-      const cx = x + between(-15, 15), cz = z + between(-15, 15), turn = between(0, 6.28);
-      box(cx, 0.75, cz, 0.9, 0.9, 1.7, C.white, -1, turn);
-      box(cx - Math.sin(turn) * -1.05, 1.0, cz - Math.cos(turn) * -1.05, 0.7, 0.7, 0.6, C.tyre, -1, turn);
-      for (const a of [-1, 1]) for (const b of [-1, 1]) box(cx + Math.cos(turn) * a * 0.3 + Math.sin(turn) * b * 0.6, 0.25, cz - Math.sin(turn) * a * 0.3 + Math.cos(turn) * b * 0.6, 0.22, 0.5, 0.22, C.white, -1, turn);
-    }
-  }
-  function farmstead(x, z) {
-    box(x, 0, z, FIELD_SIZE, 0.25, FIELD_SIZE, C.lawn);
-    const turn = pick([0, Math.PI / 2]);
-    box(x - 6, 0.25, z - 4, 8, 5, 11, C.barn, -1, turn);                         // barn
-    ridge(x - 6, 5.25, z - 4, 8.6, 3, 11.6, C.roof, -1, turn);
-    box(x - 6 + Math.sin(turn) * 5.55, 0.25, z - 4 + Math.cos(turn) * 5.55, 3, 3.4, 0.16, C.white, -1, turn);
-    cyl(x + 1.5, 0.25, z - 9, 2.1, 8.5, C.silo); cone(x + 1.5, 8.75, z - 9, 2.2, 1.6, C.roof);   // silo
-    box(x + 9, 0.25, z + 6, 6, 3, 5, pick(WALLS)); put('pyramid', x + 9, 3.25, z + 6, 6.8, 2.4, 5.8, pick(ROOFS));   // farmhouse
-    box(x + 9, 0.25, z + 8.5, 1.1, 1.7, 0.16, C.glassDark);
-    box(x - 2, 0.65, z + 9, 1.9, 1.3, 3.2, C.tractor); box(x - 2, 1.95, z + 9.6, 1.6, 1.2, 1.5, C.glassDark);   // tractor
-    for (const a of [-1, 1]) { put('wheel', x - 2 + a * 1.2, 0.25, z + 10, 0.5, 1.9, 1.9, C.tyre); put('wheel', x - 2 + a * 1.1, 0.25, z + 7.7, 0.4, 1.1, 1.1, C.tyre); }
-    for (let i = whole(3, 6); i > 0; i--) tree(x + between(-17, 17), 0.25, z + between(8, 17), -1, between(0.9, 1.4));
-  }
-  for (let x = -FARM_REACH + FIELD / 2; x < FARM_REACH; x += FIELD) for (let z = -FARM_REACH + FIELD / 2; z < FARM_REACH; z += FIELD) {
-    if (Math.abs(x) < HALF + 20 && Math.abs(z) < HALF + 20) continue;            // the city's own square, with a green margin
-    const r = rand();
-    if (r < 0.4) wheatField(x, z);
-    else if (r < 0.6) cropField(x, z, C.soil, C.crop, rand() < 0.5);
-    else if (r < 0.72) cropField(x, z, C.soil, C.soilLight, rand() < 0.5);
-    else if (r < 0.86) pasture(x, z);
-    else farmstead(x, z);
-  }
-  for (let i = 0; i < 90; i++) {                           // trees in the green margin and out past the fields
-    const far = rand() < 0.45, a = between(0, 6.28), dist = far ? between(250, 520) : 0;
+  /* ---------- the open ground around the city ----------
+     Plain green with trees: a ring of them close to town, and more spread thinly out to the horizon. */
+  for (let i = 0; i < 150; i++) {
+    const far = rand() < 0.6, a = between(0, 6.28), dist = far ? between(HALF + 30, 520) : 0;
     let x = far ? Math.cos(a) * dist : between(-HALF - 17, HALF + 17), z = far ? Math.sin(a) * dist : between(-HALF - 17, HALF + 17);
     if (!far && Math.abs(x) < HALF + 4 && Math.abs(z) < HALF + 4) { if (rand() < 0.5) x = Math.sign(x || 1) * (HALF + between(5, 17)); else z = Math.sign(z || 1) * (HALF + between(5, 17)); }
     if (Math.abs(x) < 6 || Math.abs(z) < 6) continue;      // keep the roads clear
@@ -285,6 +325,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   const meshesRising = [...new Set(rising.map(r => r.mesh))];
 
   /* ---------- moving cars ---------- */
+  const paint = c => tint.set(weatherName === 'tech' ? recolor(c, 'paint') : c);
   const CAR_COUNT = 30, cars = [];
   const carBody = new THREE.InstancedMesh(kinds.box.geo, solid, CAR_COUNT);
   const carCab = new THREE.InstancedMesh(kinds.box.geo, glass, CAR_COUNT);
@@ -293,8 +334,8 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   for (let i = 0; i < CAR_COUNT; i++) {
     const line = pick(roadLines), main = Math.abs(line) < 0.01;
     cars.push({ alongX: rand() < 0.5, line, main, dir: pick([-1, 1]), at: between(-HALF, HALF), speed: between(6, 11) });
-    carBody.setColorAt(i, tint.set(pick(CARS))); carCab.setColorAt(i, tint.set(C.glassDark));
-    for (let k = 0; k < 4; k++) carWheel.setColorAt(i * 4 + k, tint.set(C.tyre));
+    carBody.setColorAt(i, paint(pick(CARS))); carCab.setColorAt(i, paint(C.glassDark));
+    for (let k = 0; k < 4; k++) carWheel.setColorAt(i * 4 + k, paint(C.tyre));
   }
   const part = new THREE.Matrix4(), base = new THREE.Matrix4();
   function placeCars(dt) {
@@ -339,9 +380,10 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     people.push({ bx, bz, kind, at: between(0, LAP), dir: pick([-1, 1]), speed: between(1.1, 2.2) * (kind === 'child' ? 1.25 : 1),
       size: kind === 'child' ? between(0.58, 0.7) : between(0.92, 1.08), pram: kind !== 'child' && rand() < 0.12, step: between(0, 6.28) });
     const top = pick(TOPS);
-    pLegs.setColorAt(i, tint.set(kind === 'dress' ? '#1b1b1b' : pick(LEGS)));
-    pTop.setColorAt(i, tint.set(top)); pDress.setColorAt(i, tint.set(top)); pHead.setColorAt(i, tint.set(SKIN));
-    pPram.setColorAt(i * 2, tint.set(pick(['#5a6472', '#1b1b1b', '#3f48cc']))); pPram.setColorAt(i * 2 + 1, tint.set('#2c3e50'));
+    const coat = paint(top).clone();
+    pLegs.setColorAt(i, paint(kind === 'dress' ? '#1b1b1b' : pick(LEGS)));
+    pTop.setColorAt(i, coat); pDress.setColorAt(i, coat); pHead.setColorAt(i, tint.set(SKIN));
+    pPram.setColorAt(i * 2, paint(pick(['#5a6472', '#1b1b1b', '#3f48cc']))); pPram.setColorAt(i * 2 + 1, paint('#2c3e50'));
   }
   for (const m of peopleMeshes) m.instanceColor.needsUpdate = true;
   const nothing = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -365,6 +407,54 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     for (const m of peopleMeshes) m.instanceMatrix.needsUpdate = true;
   }
   placePeople(0, 0);
+
+  /* ---------- sky extras ---------- */
+  const extras = [];
+  if (look.sunDisc) {
+    const disc = new THREE.Mesh(new THREE.SphereGeometry(60, 24, 16), new THREE.MeshBasicMaterial({ color: '#fff3b0', fog: false }));
+    disc.position.copy(sun.position).setLength(1500);
+    extras.push(disc);
+  }
+  if (look.stars) {
+    const n = 1600, pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, up = 0.08 + Math.random() * 0.92, r = 1400;
+      pos.set([Math.cos(a) * Math.sqrt(1 - up * up) * r, up * r, Math.sin(a) * Math.sqrt(1 - up * up) * r], i * 3);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    extras.push(new THREE.Points(g, new THREE.PointsMaterial({ color: '#cfe0ff', size: 1.6, sizeAttenuation: false, fog: false })));
+  }
+  if (look.grid) {
+    const grid = new THREE.GridHelper(1400, 140, '#29f0ff', '#13325a');
+    grid.position.y = 0.03; grid.material.transparent = true; grid.material.opacity = 0.45;
+    extras.push(grid);
+  }
+  for (const e of extras) scene.add(e);
+
+  /* High clouds for a sunny day. They sit above the camera's opening view, so from there you see
+     only their shadows drifting across the streets; look up from street level and you see them. */
+  const clouds = [];
+  let cloudGeo = null, cloudMat = null;
+  if (look.cloudShadows) {
+    cloudGeo = new THREE.BoxGeometry(1, 1, 1);
+    cloudMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9 });
+    for (let i = 0; i < 9; i++) {
+      const cloud = new THREE.Group(), w = 26 + Math.random() * 34, d = 16 + Math.random() * 20;
+      for (let k = 0; k < 5; k++) {                   // a few stacked slabs, like a brick-built cloud
+        const part = new THREE.Mesh(cloudGeo, cloudMat);
+        part.scale.set(w * (0.45 + Math.random() * 0.55), 5 + Math.random() * 4, d * (0.5 + Math.random() * 0.5));
+        part.position.set((Math.random() - 0.5) * w * 0.6, Math.random() * 5, (Math.random() - 0.5) * d * 0.6);
+        part.castShadow = true;
+        cloud.add(part);
+      }
+      cloud.position.set(-380 + i * 90 + Math.random() * 40, 175 + Math.random() * 20, (Math.random() - 0.5) * 260);
+      cloud.userData.speed = 5 + Math.random() * 4;
+      clouds.push(cloud); scene.add(cloud);
+    }
+  }
+  function driftClouds(dt) {
+    for (const c of clouds) { c.position.x += c.userData.speed * dt; if (c.position.x > 420) c.position.x -= 840; }
+  }
 
   /* ---------- camera and controls ---------- */
   const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 3000);
@@ -405,6 +495,51 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   resize();
   addEventListener('resize', resize);
 
+  /* ---------- falling rain or snow ----------
+     The drops fill a box that follows the view: big when the camera is far out, small when it is
+     close in, so there is always rain or snow near the camera. Positions are stored from 0 to 1 and
+     the box is scaled to size. Not shown with reduced motion. */
+  let fx = null;
+  if (look.particles && !reduced) {
+    const snow = look.particles === 'snow', n = snow ? 5000 : 4200;
+    const norm = new Float32Array(n * 3), drift = new Float32Array(n);
+    for (let i = 0; i < n; i++) { norm.set([Math.random() - 0.5, Math.random(), Math.random() - 0.5], i * 3); drift[i] = Math.random(); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * (snow ? 3 : 6)), 3));
+    let mat, obj;
+    if (snow) {
+      const dot = document.createElement('canvas'); dot.width = dot.height = 32;
+      const g2 = dot.getContext('2d'), grad = g2.createRadialGradient(16, 16, 0, 16, 16, 16);
+      grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.55, 'rgba(255,255,255,.9)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g2.fillStyle = grad; g2.fillRect(0, 0, 32, 32);
+      mat = new THREE.PointsMaterial({ color: '#ffffff', size: 1, map: new THREE.CanvasTexture(dot), transparent: true, depthWrite: false });
+      obj = new THREE.Points(geo, mat);
+    } else {
+      mat = new THREE.LineBasicMaterial({ color: '#e3ecf5', transparent: true, opacity: 0.5 });
+      obj = new THREE.LineSegments(geo, mat);
+    }
+    obj.frustumCulled = false;
+    scene.add(obj);
+    fx = { snow, n, norm, drift, geo, mat, obj };
+  }
+  function stepFx(dt, t) {
+    if (!fx) return;
+    const S = Math.max(50, Math.min(380, camera.position.distanceTo(controls.target) * 1.5)), H = S * 0.6;
+    fx.obj.position.set(controls.target.x, 0, controls.target.z);
+    fx.obj.scale.set(S, H, S);
+    if (fx.snow) fx.mat.size = S * 0.0045;
+    const a = fx.norm, out = fx.geo.attributes.position.array;
+    for (let i = 0; i < fx.n; i++) {
+      const k = i * 3, d = fx.drift[i];
+      a[k + 1] -= (fx.snow ? 0.045 + d * 0.04 : 0.62 + d * 0.25) * dt;
+      if (fx.snow) a[k] += Math.sin(t * 0.8 + d * 40) * 0.006 * dt;
+      if (a[k + 1] < 0) { a[k + 1] += 1; a[k] = Math.random() - 0.5; a[k + 2] = Math.random() - 0.5; }
+      if (fx.snow) { out[k] = a[k]; out[k + 1] = a[k + 1]; out[k + 2] = a[k + 2]; }
+      else { const o = i * 6; out[o] = a[k]; out[o + 1] = a[k + 1]; out[o + 2] = a[k + 2]; out[o + 3] = a[k] + 0.0035; out[o + 4] = a[k + 1] - 0.022; out[o + 5] = a[k + 2]; }
+    }
+    fx.geo.attributes.position.needsUpdate = true;
+  }
+
   /* ---------- the build: each building rises out of the ground, the centre first ---------- */
   const DUR = 0.75, total = reduced ? 0 : Math.max(...groups.map(g => g.start), 0) + DUR;
   const grow = new THREE.Matrix4(), out = new THREE.Matrix4();
@@ -430,7 +565,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     const real = (now - (last || now)) / 1000, dt = Math.min(0.05, real); last = now;
     clock += Math.min(0.5, real);                          // the build follows real time, so a slow frame rate cannot stall it
     if (!built) { setBuild(clock); if (clock >= total) markBuilt(); }
-    if (!reduced) { placeCars(dt); placePeople(dt, clock); }
+    if (!reduced) { placeCars(dt); placePeople(dt, clock); stepFx(dt, clock); driftClouds(dt); }
     if (glide) {
       glide.t = Math.min(1, glide.t + dt / 0.9);
       const k = 1 - Math.pow(1 - glide.t, 3);
@@ -452,6 +587,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   const offset = new THREE.Vector3();
   return {
     seed: usedSeed,
+    weather: weatherName,
     finish: markBuilt,
     /* factor below 1 moves in, above 1 moves out */
     zoom(factor) {
@@ -472,7 +608,11 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
       controls.dispose(); renderer.dispose(); canvas.remove();
       for (const k of Object.values(kinds)) k.geo.dispose();
       dressGeo.dispose();
-      solid.dispose(); glass.dispose();
+      solid.dispose(); glass.dispose(); glowMat.dispose();
+      for (const e of extras) { e.geometry.dispose(); e.material.dispose(); }
+      if (cloudGeo) { cloudGeo.dispose(); cloudMat.dispose(); }
+      if (skyTexture) skyTexture.dispose();
+      if (fx) { fx.geo.dispose(); fx.mat.dispose(); if (fx.mat.map) fx.mat.map.dispose(); }
     }
   };
 }
