@@ -42,7 +42,7 @@ const LOOKS = {
       wheat: '#eef2f6', leafLight: '#dfe8ec', hay: '#f0f3f6', pavement: '#e6ebf0', water: '#c7e3f3', road: '#5d616a' },
     kinds: { pyramid: SNOW, roof: SNOW } },
   /* The easter egg: the same city at night, built from dark tech parts with glowing windows and lines. */
-  tech: { sky: '#060a18', fog: [380, 1100], hemi: ['#4a6cff', '#05070f', 0.55], sun: ['#9fb6ff', 0.7], stars: true, grid: true, neonRims: true,
+  tech: { sky: '#060a18', fog: [380, 1100], hemi: ['#4a6cff', '#05070f', 0.55], sun: ['#9fb6ff', 0.7], stars: true, grid: true, neonRims: true, headlights: true,
     glow: ['line'], litGlass: true,
     map: { grass: '#0b1224', grassDark: '#0b1224', lawn: '#0f1a30', pasture: '#0f1a30', wheatSoil: '#0b1224', soil: '#0b1224', soilLight: '#0b1224',
       road: '#090d1a', asphalt: '#090d1a', pavement: '#18203a', line: '#29f0ff', glassDark: '#04060d', tyre: '#04060d', trunk: '#2a3350',
@@ -54,12 +54,64 @@ const LOOKS = {
 };
 export const WEATHERS = Object.keys(LOOKS);
 
+/* ---------- seasons, by date ----------
+   Autumn: 22 September to 30 November. Leafy trees turn orange and start to lose their leaves.
+   Christmas: Advent Sunday (the fourth Sunday before Christmas) to 25 December. String lights on
+   buildings, sparkles in the trees, and some people in Santa hats or carrying shopping bags.
+   In the snow, leafy trees are bare whatever the date. */
+const AUTUMN = ['#e8731c', '#d94f1a', '#f2a51e', '#c9361b', '#e0b23a', '#b8541c'];
+const XMAS_BULBS = ['#ff3b3b', '#ffd23b', '#3bff6b', '#3bb5ff', '#ff5bd8', '#ffffff'];
+const WARM_BULB = '#fff1b8', SPARKLES = ['#fff6c8', '#ffffff', '#ffe27a'];
+const BAGS = ['#c8102e', '#0e8f3a', '#ffffff', '#d4a017', '#3f48cc'];
+export function seasonsFor(date = new Date()) {
+  const y = date.getFullYear(), day = new Date(y, date.getMonth(), date.getDate());
+  const xmas = new Date(y, 11, 25), advent = new Date(y, 11, 25 - (xmas.getDay() || 7) - 21);
+  return { autumn: day >= new Date(y, 8, 22) && day <= new Date(y, 10, 30), christmas: day >= advent && day <= xmas };
+}
+/* Seasonal skies, laid over the weather's own look.
+   Autumn: a greyer, softer sky (rain is already grey, snow and tech keep their own).
+   Christmas: late afternoon just before dusk. The sun is low and orange, the sky fades from deep
+   blue overhead through violet to a peach horizon, shadows are long, and windows glow faintly warm,
+   so the string lights read well. Applies in every weather except the tech city. */
+const AUTUMN_SKY = {
+  clear: { sky: '#b9c3cc', fog: [380, 1100], hemi: ['#d4dbe2', '#7a7466', 1.35], sun: ['#f0e4cc', 1.8] },
+  sun: { sky: '#d3dae0', skyTop: '#6f9bcb', sun: ['#ffe2b0', 2.9] }
+};
+/* Christmas: just past dusk, around half past four in the afternoon in Vancouver. The sun has set: there
+   is no direct sunlight, only a fading afterglow low in the sky. Windows are lit, street lamps are on,
+   vehicles have their lights on, and the string lights and tree sparkles carry the scene. */
+const DUSK = {
+  all: { sky: '#a45f55', skyMid: '#3a3566', skyTop: '#0b1030', fogColor: '#4b3d55', fog: [260, 900], hemi: ['#5d6aa8', '#2a2430', 0.5],
+    sun: ['#ff8a50', 0.22], sunPos: [200, 25, 120], warmWindows: true, headlights: true, streetLamps: true },
+  /* Clear at Christmas is overcast, not sunny. */
+  clear: { sky: '#8a6a70', skyMid: '#363a62', skyTop: '#0e1434', fogColor: '#4a4458', hemi: ['#6a74a8', '#34303a', 0.55], sun: ['#ff9d6a', 0.12],
+    map: { grass: '#668f4c', grassDark: '#557a40', lawn: '#729b56', leafLight: '#5d8f4c', pasture: '#6f9452' } },
+  snow: { sky: '#a87882', skyMid: '#463e78', skyTop: '#0e163e', fogColor: '#5b5470', hemi: ['#7480c0', '#4d4860', 0.6], sun: ['#ffa070', 0.2] },
+  rain: { sky: '#4e4652', skyMid: '#2a2c40', skyTop: '#0c1020', fogColor: '#353342', fog: [200, 760], hemi: ['#56607e', '#25252c', 0.42], sun: ['#d08060', 0.1] }
+};
+function seasonalLook(name, seasons) {
+  const base = LOOKS[name];
+  if (name === 'tech') return base;
+  if (seasons.christmas) { const d = DUSK[name] || {}; return { ...base, ...DUSK.all, ...d, map: { ...base.map, ...(d.map || {}) } }; }
+  if (seasons.autumn && AUTUMN_SKY[name]) return { ...base, ...AUTUMN_SKY[name] };
+  return base;
+}
+/* "2026-12-10" is read as a local date (new Date() would read it as UTC midnight, the day before here). */
+function parseDate(v) {
+  if (v instanceof Date) return v;
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(v || ''));
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], 12) : new Date();
+}
+
 /* Plain weather most of the time. When there is weather, the one that suits the season (Vancouver,
    northern hemisphere) comes up three times as often as each of the others. The tech city is a rare
    easter egg. */
 const TECH_CHANCE = 1 / 40, CLEAR_CHANCE = 0.55;
 const seasonWeather = month => ([11, 0, 1].includes(month) ? 'snow' : [5, 6, 7].includes(month) ? 'sun' : 'rain');
 export function pickWeather(date = new Date(), r = Math.random) {
+  /* The Christmas season has its own odds, so snow leads: snow 60%, overcast clear 30%, rain 7.5%,
+     tech 2.5%. No sun. */
+  if (seasonsFor(date).christmas) { const x = r(); return x < 0.025 ? 'tech' : x < 0.625 ? 'snow' : x < 0.925 ? 'clear' : 'rain'; }
   if (r() < TECH_CHANCE) return 'tech';
   if (r() < CLEAR_CHANCE) return 'clear';
   const inSeason = seasonWeather(date.getMonth()), others = ['rain', 'snow', 'sun'].filter(w => w !== inSeason);
@@ -67,7 +119,7 @@ export function pickWeather(date = new Date(), r = Math.random) {
   return x < 0.6 ? inSeason : x < 0.8 ? others[0] : others[1];
 }
 
-export async function startCity({ container, reduced = false, onBuilt = () => {}, seed, weather } = {}) {
+export async function startCity({ container, reduced = false, onBuilt = () => {}, seed, weather, date } = {}) {
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
 
@@ -80,13 +132,19 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   const pick = list => list[Math.floor(rand() * list.length)];
 
   /* The weather's own random picks use Math.random, so a given seed builds the same streets in any weather. */
-  const weatherName = LOOKS[weather] ? weather : pickWeather();
-  const look = LOOKS[weatherName], anyPick = list => list[Math.floor(Math.random() * list.length)];
+  const today = parseDate(date), seasons = seasonsFor(today);
+  const picked = LOOKS[weather] ? weather : pickWeather(today);
+  const weatherName = seasons.christmas && picked === 'sun' ? 'clear' : picked;   // even when asked for, no sun at Christmas
+  const look = seasonalLook(weatherName, seasons), anyPick = list => list[Math.floor(Math.random() * list.length)];
   const colourMap = {};
   for (const [name, to] of Object.entries(look.map)) colourMap[C[name]] = to;
   const glowSet = new Set((look.glow || []).map(n => C[n]));
+  /* Seasonal touches also use Math.random, for the same reason. */
+  const bareTrees = !!look.snowCaps, autumnTrees = seasons.autumn && !bareTrees && weatherName !== 'tech', xmas = seasons.christmas;
+  const chance = k => Math.random() < k, near = r => (Math.random() - 0.5) * 2 * r;
   /* kind 'paint' is cars and people; everything else is scenery */
   function recolor(c, kind) {
+    if (kind === 'bulb' || kind === 'lamp') return c;                          // lights keep their own colours in any weather
     if (look.kinds && look.kinds[kind]) return look.kinds[kind];
     if (look.litGlass && c === C.glass) return anyPick(look.windows);
     if (colourMap[c]) return colourMap[c];
@@ -108,15 +166,16 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   if (look.skyTop) {                                     // a sky that is deep blue overhead and pale at the horizon
     const c = document.createElement('canvas'); c.width = 2; c.height = 256;
     const g = c.getContext('2d'), grad = g.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, look.skyTop); grad.addColorStop(0.75, look.sky); grad.addColorStop(1, look.sky);
+    grad.addColorStop(0, look.skyTop); if (look.skyMid) grad.addColorStop(0.5, look.skyMid);
+    grad.addColorStop(0.78, look.sky); grad.addColorStop(1, look.sky);
     g.fillStyle = grad; g.fillRect(0, 0, 2, 256);
     skyTexture = new THREE.CanvasTexture(c); skyTexture.colorSpace = THREE.SRGBColorSpace;
     scene.background = skyTexture;
   }
-  scene.fog = new THREE.Fog(look.sky, look.fog[0], look.fog[1]);
+  scene.fog = new THREE.Fog(look.fogColor || look.sky, look.fog[0], look.fog[1]);
   scene.add(new THREE.HemisphereLight(look.hemi[0], look.hemi[1], look.hemi[2]));
   const sun = new THREE.DirectionalLight(look.sun[0], look.sun[1]);
-  sun.position.set(130, 230, 90);
+  sun.position.set(...(look.sunPos || [130, 230, 90]));
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -140, right: 140, top: 140, bottom: -140, near: 10, far: 700 });
@@ -126,7 +185,9 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   /* ---------- pieces: collected first, then turned into instanced meshes ---------- */
   const solid = new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0 });
   const glass = look.litGlass ? new THREE.MeshBasicMaterial() : new THREE.MeshStandardMaterial({ roughness: 0.12, metalness: 0.25 });
+  if (look.warmWindows && glass.emissive) { glass.emissive.set('#ffb347'); glass.emissiveIntensity = 0.62; }   // lamps on inside
   const glowMat = new THREE.MeshBasicMaterial();         // unlit: shows its colour at full strength
+  const bulbMat = new THREE.MeshBasicMaterial(), lampMat = new THREE.MeshBasicMaterial();
   const roofGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 3); roofGeo.rotateX(-Math.PI / 2);      // ridge along Z, apex up
   const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 12); wheelGeo.rotateZ(Math.PI / 2);   // axle along X
   const kinds = {
@@ -139,7 +200,9 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     wheat: { geo: new THREE.ConeGeometry(0.5, 1, 5), mat: solid, items: [] },
     roof: { geo: roofGeo, mat: solid, items: [] },
     wheel: { geo: wheelGeo, mat: solid, items: [] },
-    glow: { geo: new THREE.BoxGeometry(1, 1, 1), mat: glowMat, items: [] }
+    glow: { geo: new THREE.BoxGeometry(1, 1, 1), mat: glowMat, items: [] },
+    bulb: { geo: new THREE.BoxGeometry(1, 1, 1), mat: bulbMat, items: [] },
+    lamp: { geo: new THREE.BoxGeometry(1, 1, 1), mat: lampMat, items: [] }
   };
   const UP = new THREE.Vector3(0, 1, 0), mx = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
   // Every piece is placed by the centre of its base. group ties it to a building so it can rise with it.
@@ -164,17 +227,59 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   const newGroup = (x, z) => groups.push({ start: Math.hypot(x, z) * 0.011 + rand() * 0.3 }) - 1;
 
   /* ---------- trees, cars at rest ---------- */
+  const bulb = (x, y, z, c, g, sz = 0.26) => put('bulb', x, y - sz / 2, z, sz, sz, sz, c, g);
+  /* A leafless crown: a thinner upper trunk with branches crossing it at a few heights.
+     In the snow each branch carries a thin line of snow. */
+  function bareCrown(x, y, z, size, g) {
+    cyl(x, y + 1.4 * size, z, 0.17 * size, 1.7 * size, C.trunk, g);
+    for (let k = 0; k < 4; k++) {
+      const h = y + (1.75 + k * 0.42) * size, len = (2.0 - k * 0.32) * size, turn = Math.random() * Math.PI;
+      box(x, h, z, len, 0.14 * size, 0.14 * size, C.trunk, g, turn);
+      if (bareTrees) box(x, h + 0.14 * size, z, len * 0.8, 0.07 * size, 0.15 * size, SNOW, g, turn);
+    }
+  }
+  function sparkle(x, y, z, size, g, count, height, radius) {
+    for (let k = 0; k < count; k++) {
+      const t = Math.random(), a = Math.random() * Math.PI * 2, [h0, h1] = height, [r0, r1] = radius;
+      const r = (r0 + (r1 - r0) * t) * size;
+      bulb(x + Math.cos(a) * r, y + (h0 + (h1 - h0) * t) * size, z + Math.sin(a) * r, SPARKLES[k % SPARKLES.length], g, 0.18 * size);
+    }
+  }
   function tree(x, y, z, g = -1, size = 1) {
     cyl(x, y, z, 0.3 * size, 1.5 * size, C.trunk, g);
-    if (rand() < 0.5) {                                  // pine
+    if (rand() < 0.5) {                                  // pine: evergreen in every season
       cone(x, y + 1.3 * size, z, 1.5 * size, 2.3 * size, C.leaf, g);
       cone(x, y + 2.6 * size, z, 1.1 * size, 1.9 * size, C.leaf, g);
       if (look.snowCaps) cone(x, y + 3.55 * size, z, 0.72 * size, 0.95 * size, SNOW, g);
-    } else {                                             // round
-      cyl(x, y + 1.4 * size, z, 1.4 * size, 1.1 * size, C.leafLight, g);
-      cyl(x, y + 2.5 * size, z, 1.0 * size, 0.9 * size, C.leafLight, g);
-      stud(x, y + 3.4 * size, z, C.leafLight, g);
+      if (xmas) sparkle(x, y, z, size, g, 7, [1.55, 3.9], [1.42, 0.45]);
+      return;
     }
+    if (bareTrees) {                                     // snow: no leaves at all
+      bareCrown(x, y, z, size, g);
+      if (xmas) sparkle(x, y, z, size, g, 5, [1.9, 3.1], [0.9, 0.5]);
+      return;
+    }
+    if (autumnTrees) {
+      const r = Math.random();
+      if (r < 0.5) {                                     // full, turned orange
+        cyl(x, y + 1.4 * size, z, 1.4 * size, 1.1 * size, anyPick(AUTUMN), g);
+        cyl(x, y + 2.5 * size, z, 1.0 * size, 0.9 * size, anyPick(AUTUMN), g);
+        stud(x, y + 3.4 * size, z, anyPick(AUTUMN), g);
+      } else if (r < 0.82) {                             // half bare
+        bareCrown(x, y, z, size, g);
+        cyl(x + near(0.4 * size), y + 2.2 * size, z + near(0.4 * size), 0.9 * size, 0.75 * size, anyPick(AUTUMN), g);
+      } else {                                           // nearly bare, a few leaves left
+        bareCrown(x, y, z, size, g);
+        for (let k = 0; k < 4; k++) stud(x + near(0.8 * size), y + (2.0 + Math.random() * 1.2) * size, z + near(0.8 * size), anyPick(AUTUMN), g);
+      }
+      for (let k = 0; k < 4; k++) stud(x + near(1.6 * size), y, z + near(1.6 * size), anyPick(AUTUMN), g);   // fallen leaves
+      if (xmas) sparkle(x, y, z, size, g, 5, [1.6, 3.0], [1.1, 0.6]);
+      return;
+    }
+    cyl(x, y + 1.4 * size, z, 1.4 * size, 1.1 * size, C.leafLight, g);
+    cyl(x, y + 2.5 * size, z, 1.0 * size, 0.9 * size, C.leafLight, g);
+    stud(x, y + 3.4 * size, z, C.leafLight, g);
+    if (xmas) sparkle(x, y, z, size, g, 6, [1.55, 2.95], [1.42, 1.02]);
   }
   function parkedCar(x, y, z, turn, g) {
     const color = pick(CARS), s = Math.sin(turn), c = Math.cos(turn);
@@ -195,7 +300,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   for (const c of roadLines) {
     const far = Math.abs(c) < 0.01 ? 380 : HALF;                                // the two main roads keep their lines
     for (let t = -far + 1.5; t < far; t += 4) {
-      if (roadLines.some(r => Math.abs(t + 1 - r) < ROAD / 2 + 0.6) && Math.abs(t) < HALF) continue;   // no dashes in junctions
+      if (roadLines.some(r => Math.abs(t + 1 - r) < ROAD / 2 + 1.8) && Math.abs(t) < HALF) continue;   // no dashes in junctions or crossings
       box(c, 0.2, t + 1, 0.25, 0.04, 2, C.line);
       box(t + 1, 0.2, c, 2, 0.04, 0.25, C.line);
     }
@@ -223,6 +328,15 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     else if (r < 0.8 && tall) { cyl(x, y, z, 0.12, between(3, 6), C.roof, g); }                               // mast
     else if (tall && w > 8) { cyl(x, y, z, w * 0.3, 0.12, C.white, g); box(x, y + 0.12, z, w * 0.36, 0.03, 0.5, C.barn, g); }   // helipad
   }
+  /* A string of little lights round the top edge of a building, at Christmas. Some buildings get
+     coloured bulbs, some warm white, some none. */
+  function lightsAround(x, y, z, w, d, g) {
+    if (!xmas || chance(0.25)) return;
+    const colours = chance(0.55) ? XMAS_BULBS : [WARM_BULB], STEP = 0.75;
+    let n = 0;
+    for (let t = -w / 2 + 0.3; t <= w / 2 - 0.3; t += STEP) for (const sd of [-1, 1]) bulb(x + t, y - 0.18, z + sd * (d / 2 + 0.07), colours[n++ % colours.length], g);
+    for (let t = -d / 2 + 0.3; t <= d / 2 - 0.3; t += STEP) for (const sd of [-1, 1]) bulb(x + sd * (w / 2 + 0.07), y - 0.18, z + t, colours[n++ % colours.length], g);
+  }
   function building(x, z, w, d, floors, g) {
     const wall = pick(WALLS);
     let y = TOP;
@@ -237,6 +351,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
       box(x, y, z, w, 0.5, d, wall, g);
       y += 0.5;
     }
+    lightsAround(x, y, z, w, d, g);
     if (floors <= 2 && rand() < 0.6) {                   // a low building often gets a pitched roof
       put('pyramid', x, y, z, w + 0.6, between(1.6, 2.6), d + 0.6, pick(ROOFS), g);
       return;
@@ -259,8 +374,10 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
       }
     };
     tier(w, d, lower);
+    lightsAround(x, y, z, w, d, g);
     for (let a = 0.5; a < w; a += 2) for (let b = 0.5; b < d; b += 2) if (Math.abs(a - w / 2) > w / 2 - 2 || Math.abs(b - d / 2) > d / 2 - 2) stud(x - w / 2 + a, y, z - d / 2 + b, wall, g);
     tier(w - 3, d - 3, upper);
+    lightsAround(x, y, z, w - 3, d - 3, g);
     roofTop(x, y, z, w - 3, d - 3, wall, g, true);
   }
   function park(x, z, g) {
@@ -301,6 +418,28 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     }
   }
 
+  /* ---------- zebra crossings ----------
+     On every arm of every junction inside town, where people cross from one block's corner to the next. */
+  const CROSS_AT = ROAD / 2 + (BLOCK / 2 - (BLOCK / 2 - 0.45));     // the line people walk on, measured from the junction centre
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+    const cx = roadLines[i], cz = roadLines[j];
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = i + dx, nj = j + dz;
+      if (ni < 0 || ni > N || nj < 0 || nj > N) continue;
+      for (let a = -2.55; a <= 2.56; a += 0.85) {
+        if (dx) box(cx + dx * CROSS_AT, 0.2, cz + a, 1.2, 0.04, 0.45, C.line);
+        else box(cx + a, 0.2, cz + dz * CROSS_AT, 0.45, 0.04, 1.2, C.line);
+      }
+    }
+  }
+  /* Street lamps at the corners of every block, lit after dusk. */
+  if (look.streetLamps) for (const [x, z] of blocks) for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    const lx = x + a * 7.35, lz = z + b * 7.35;
+    cyl(lx, TOP, lz, 0.12, 3.3, '#3a3f48');
+    box(lx - a * 0.3, TOP + 3.2, lz - b * 0.3, 0.7, 0.12, 0.7, '#3a3f48');
+    put('lamp', lx - a * 0.3, TOP + 3.02, lz - b * 0.3, 0.5, 0.2, 0.5, '#ffd98a');
+  }
+
   /* ---------- the open ground around the city ----------
      Plain green with trees: a ring of them close to town, and more spread thinly out to the horizon. */
   for (let i = 0; i < 150; i++) {
@@ -323,42 +462,147 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     kind.mesh = mesh;
   }
   const meshesRising = [...new Set(rising.map(r => r.mesh))];
+  /* The lights twinkle: every so often a few of them dim or come back on. */
+  const bulbs = kinds.bulb.mesh, bulbBase = bulbs ? bulbs.instanceColor.array.slice() : null;
+  let twinkleAt = 0;
+  function twinkle(t) {
+    if (!bulbs || t < twinkleAt) return;
+    twinkleAt = t + 0.14;
+    const a = bulbs.instanceColor.array, n = bulbs.count;
+    for (let k = 0; k < n * 0.05; k++) {
+      const i = (Math.random() * n) | 0, f = Math.random() < 0.45 ? 0.2 : 1;
+      a[i * 3] = bulbBase[i * 3] * f; a[i * 3 + 1] = bulbBase[i * 3 + 1] * f; a[i * 3 + 2] = bulbBase[i * 3 + 2] * f;
+    }
+    bulbs.instanceColor.needsUpdate = true;
+  }
 
-  /* ---------- moving cars ---------- */
+  /* ---------- traffic ----------
+     Cars, trucks and buses drive on the right. At every junction a vehicle goes straight on, turns left
+     or turns right, following a curve through the junction, and it keeps its distance from the vehicle
+     in front in its lane. The two main roads run out of town; a vehicle that reaches the far end of one
+     turns round out of sight. After dusk (and in the tech city) their lights are on. */
   const paint = c => tint.set(weatherName === 'tech' ? recolor(c, 'paint') : c);
-  const CAR_COUNT = 30, cars = [];
-  const carBody = new THREE.InstancedMesh(kinds.box.geo, solid, CAR_COUNT);
-  const carCab = new THREE.InstancedMesh(kinds.box.geo, glass, CAR_COUNT);
-  const carWheel = new THREE.InstancedMesh(wheelGeo, solid, CAR_COUNT * 4);
-  for (const m of [carBody, carCab, carWheel]) { m.castShadow = true; m.frustumCulled = false; scene.add(m); }
-  for (let i = 0; i < CAR_COUNT; i++) {
-    const line = pick(roadLines), main = Math.abs(line) < 0.01;
-    cars.push({ alongX: rand() < 0.5, line, main, dir: pick([-1, 1]), at: between(-HALF, HALF), speed: between(6, 11) });
-    carBody.setColorAt(i, paint(pick(CARS))); carCab.setColorAt(i, paint(C.glassDark));
-    for (let k = 0; k < 4; k++) carWheel.setColorAt(i * 4 + k, paint(C.tyre));
+  const J = ROAD / 2, LANE = 1.45, FAR = 400, MID = N / 2;
+  const coord = k => (k < 0 ? -FAR : k > N ? FAR : roadLines[k]);
+  const inGrid = k => k >= 0 && k <= N;
+  const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  const rightOf = d => [-d[1], d[0]];
+  function canGo(i, j, d) {
+    if (!inGrid(i) || !inGrid(j)) return false;
+    const ni = i + d[0], nj = j + d[1];
+    if (inGrid(ni) && inGrid(nj)) return true;
+    return d[1] === 0 ? j === MID && (ni === -1 || ni === N + 1) : i === MID && (nj === -1 || nj === N + 1);
+  }
+  function makePath(pts) {
+    const cum = [0];
+    for (let k = 1; k < pts.length; k++) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
+    return { pts, cum, len: cum[cum.length - 1] };
+  }
+  function along(path, s) {                               // position and heading at distance s
+    const { pts, cum } = path;
+    s = Math.max(0, Math.min(path.len, s));
+    let k = 1; while (k < pts.length - 1 && cum[k] < s) k++;
+    const a = pts[k - 1], b = pts[k], f = (s - cum[k - 1]) / ((cum[k] - cum[k - 1]) || 1);
+    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, Math.atan2(b[0] - a[0], b[1] - a[1])];
+  }
+  function segPath(i, j, d) {                             // from junction (i, j) to the next one, in the right-hand lane
+    const r = rightOf(d), ni = i + d[0], nj = j + d[1];
+    const ja = inGrid(i) && inGrid(j) ? J : 0, jb = inGrid(ni) && inGrid(nj) ? J : 0;
+    return makePath([[coord(i) + d[0] * ja + r[0] * LANE, coord(j) + d[1] * ja + r[1] * LANE],
+                     [coord(ni) - d[0] * jb + r[0] * LANE, coord(nj) - d[1] * jb + r[1] * LANE]]);
+  }
+  function turnPath(i, j, d1, d2) {                       // a curve through junction (i, j), from heading d1 to heading d2
+    const cx = coord(i), cz = coord(j), r1 = rightOf(d1), r2 = rightOf(d2);
+    const p0 = [cx - d1[0] * J + r1[0] * LANE, cz - d1[1] * J + r1[1] * LANE];
+    const p2 = [cx + d2[0] * J + r2[0] * LANE, cz + d2[1] * J + r2[1] * LANE];
+    let p1;
+    if (d1[0] === d2[0] && d1[1] === d2[1]) p1 = [(p0[0] + p2[0]) / 2, (p0[1] + p2[1]) / 2];
+    else if (d1[0] === -d2[0] && d1[1] === -d2[1]) p1 = [cx + d1[0] * J, cz + d1[1] * J];
+    else { const t = ((r2[0] - r1[0]) * d1[0] + (r2[1] - r1[1]) * d1[1]) * LANE; p1 = [cx + r1[0] * LANE + d1[0] * t, cz + r1[1] * LANE + d1[1] * t]; }
+    const pts = [];
+    for (let k = 0; k <= 8; k++) { const u = k / 8, v = 1 - u; pts.push([v * v * p0[0] + 2 * v * u * p1[0] + u * u * p2[0], v * v * p0[1] + 2 * v * u * p1[1] + u * u * p2[1]]); }
+    return makePath(pts);
+  }
+
+  /* What each kind of vehicle is made of: [part, size, centre], relative to its middle with the front at +z. */
+  const TYPES = {
+    car: { len: 3.8, speed: [7, 11], lightsY: 0.8, w: 1.8, parts: {
+      body: [[1.8, 0.8, 3.8], [0, 0.75, 0]], glass: [[1.6, 0.7, 1.9], [0, 1.5, -0.2]],
+      wheels: [[0.35, 0.8, 0.8], [[-0.9, 0.4, 1.2], [0.9, 0.4, 1.2], [-0.9, 0.4, -1.2], [0.9, 0.4, -1.2]]] } },
+    truck: { len: 6.6, speed: [6, 8], lightsY: 1.0, w: 2.2, parts: {
+      body: [[2.1, 1.8, 1.9], [0, 1.3, 2.35]], glass: [[2.14, 0.6, 1.0], [0, 1.75, 2.6]], cargo: [[2.3, 2.4, 4.6], [0, 1.65, -1.0]],
+      wheels: [[0.4, 1.0, 1.0], [[-1.0, 0.5, 2.4], [1.0, 0.5, 2.4], [-1.0, 0.5, -0.6], [1.0, 0.5, -0.6], [-1.0, 0.5, -2.4], [1.0, 0.5, -2.4]]] } },
+    bus: { len: 9, speed: [5, 7], lightsY: 1.0, w: 2.3, parts: {
+      body: [[2.3, 2.2, 9], [0, 1.55, 0]], glass: [[2.34, 0.75, 8.4], [0, 1.9, 0.1]],
+      wheels: [[0.4, 1.0, 1.0], [[-1.05, 0.5, 3.2], [1.05, 0.5, 3.2], [-1.05, 0.5, -3.2], [1.05, 0.5, -3.2]]] } }
+  };
+  const BUS_COLOURS = ['#fff200', '#ed1c24', '#00a8f3', '#0ed145'], CARGO_COLOURS = ['#ffffff', '#d8dde3', '#f28c28', '#3f48cc', '#ed1c24'];
+  const fleet = [...Array(24).fill('car'), ...Array(5).fill('truck'), ...Array(4).fill('bus')];
+  const V = fleet.length, cars = [];
+  const vBody = new THREE.InstancedMesh(kinds.box.geo, solid, V), vGlass = new THREE.InstancedMesh(kinds.box.geo, glass, V);
+  const vCargo = new THREE.InstancedMesh(kinds.box.geo, solid, V), vWheel = new THREE.InstancedMesh(wheelGeo, solid, V * 6);
+  const lightMat = new THREE.MeshBasicMaterial(), vLight = new THREE.InstancedMesh(kinds.box.geo, lightMat, V * 4);
+  const vehicleMeshes = [vBody, vGlass, vCargo, vWheel, vLight];
+  for (const m of vehicleMeshes) { m.castShadow = m !== vLight; m.frustumCulled = false; scene.add(m); }
+  vLight.visible = !!look.headlights;
+  fleet.forEach((type, n) => {
+    const T = TYPES[type];
+    let i, j, d;
+    do { i = Math.floor(rand() * (N + 1)); j = Math.floor(rand() * (N + 1)); d = DIRS[Math.floor(rand() * 4)]; } while (!canGo(i, j, d));
+    const path = segPath(i, j, d);
+    cars.push({ type, T, i, j, d, path, mode: 'seg', s: rand() * path.len, speed: between(T.speed[0], T.speed[1]) });
+    vBody.setColorAt(n, paint(type === 'bus' ? pick(BUS_COLOURS) : pick(CARS)));
+    vGlass.setColorAt(n, paint(C.glassDark));
+    vCargo.setColorAt(n, paint(pick(CARGO_COLOURS)));
+    for (let k = 0; k < 6; k++) vWheel.setColorAt(n * 6 + k, paint(C.tyre));
+    for (let k = 0; k < 4; k++) vLight.setColorAt(n * 4 + k, tint.set(k < 2 ? '#fff4c8' : '#ff2a2a'));
+  });
+  for (const m of vehicleMeshes) m.instanceColor.needsUpdate = true;
+
+  /* Where a vehicle is in its lane, for keeping distance: the lane it is in and how far along it. */
+  function laneSpot(v) {
+    if (v.mode === 'seg') return [v.i + ',' + v.j + ',' + v.d, v.s];
+    return [v.pi + ',' + v.pj + ',' + v.pd, v.segLen + v.s];   // still counts as the lane it came from while turning
+  }
+  function nextLeg(v) {
+    const ni = v.i + v.d[0], nj = v.j + v.d[1];
+    if (v.mode === 'turn') { v.i = v.ti; v.j = v.tj; v.d = v.nd; v.path = segPath(v.i, v.j, v.d); v.mode = 'seg'; v.s = 0; return; }
+    if (!inGrid(ni) || !inGrid(nj)) {                     // the far end of a main road: turn round out of sight
+      v.i = ni; v.j = nj; v.d = [-v.d[0], -v.d[1]]; v.path = segPath(v.i, v.j, v.d); v.s = 0; return;
+    }
+    const straight = v.d, left = [v.d[1], -v.d[0]], right = rightOf(v.d);
+    const options = [[straight, 0.5], [left, 0.25], [right, 0.25]].filter(([d]) => canGo(ni, nj, d));
+    let nd = [-v.d[0], -v.d[1]];
+    if (options.length) { let x = rand() * options.reduce((t, o) => t + o[1], 0); for (const [d, w] of options) { if ((x -= w) <= 0) { nd = d; break; } } }
+    Object.assign(v, { pi: v.i, pj: v.j, pd: v.d, segLen: v.path.len, ti: ni, tj: nj, nd, mode: 'turn', s: 0, path: turnPath(ni, nj, v.d, nd) });
   }
   const part = new THREE.Matrix4(), base = new THREE.Matrix4();
+  function setPart(mesh, index, size, at) { mesh.setMatrixAt(index, part.makeScale(size[0], size[1], size[2]).setPosition(at[0], at[1], at[2]).premultiply(base)); }
   function placeCars(dt) {
-    cars.forEach((car, i) => {
-      car.at += car.dir * car.speed * dt;
-      const limit = car.main ? 400 : HALF - 2.5;
-      if (car.main) { if (car.at > limit) car.at = -limit; else if (car.at < -limit) car.at = limit; }
-      else if (Math.abs(car.at) > limit) { car.at = Math.sign(car.at) * limit; car.dir *= -1; }   // U-turn at the edge of town
-      // travelling along +Z means heading 0; keep to the right-hand lane
-      const heading = car.alongX ? (car.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (car.dir > 0 ? 0 : Math.PI);
-      const side = 1.45 * car.dir;
-      const x = car.alongX ? car.at : car.line - side, z = car.alongX ? car.line + side : car.at;
-      q.setFromAxisAngle(UP, heading);
+    const spots = cars.map(laneSpot);
+    cars.forEach((v, n) => {
+      const [lane, pos] = spots[n];
+      let gap = Infinity;
+      cars.forEach((o, m) => { if (m !== n && spots[m][0] === lane && spots[m][1] > pos) gap = Math.min(gap, spots[m][1] - pos - (o.T.len + v.T.len) / 2); });
+      const pace = v.speed * (v.mode === 'turn' ? 0.55 : 1);
+      let move = gap < 1.2 ? 0 : Math.min(pace * dt, gap - 1.2);
+      while (move > 0) { const left = v.path.len - v.s; if (move < left) { v.s += move; move = 0; } else { move -= left; v.s = v.path.len; nextLeg(v); } }
+      const [x, z, yaw] = along(v.path, v.s), T = v.T, P = T.parts;
+      q.setFromAxisAngle(UP, yaw);
       base.compose(p.set(x, 0.2, z), q, sc.set(1, 1, 1));
-      carBody.setMatrixAt(i, part.makeScale(1.8, 0.8, 3.8).setPosition(0, 0.75, 0).premultiply(base));
-      carCab.setMatrixAt(i, part.makeScale(1.6, 0.7, 1.9).setPosition(0, 1.5, -0.2).premultiply(base));
-      let k = 0;
-      for (const a of [-1, 1]) for (const b of [-1, 1])
-        carWheel.setMatrixAt(i * 4 + k++, part.makeScale(0.35, 0.8, 0.8).setPosition(a * 0.9, 0.4, b * 1.2).premultiply(base));
+      setPart(vBody, n, P.body[0], P.body[1]);
+      setPart(vGlass, n, P.glass[0], P.glass[1]);
+      if (P.cargo) setPart(vCargo, n, P.cargo[0], P.cargo[1]); else vCargo.setMatrixAt(n, nothing);
+      for (let k = 0; k < 6; k++) { const w = P.wheels[1][k]; if (w) setPart(vWheel, n * 6 + k, P.wheels[0], w); else vWheel.setMatrixAt(n * 6 + k, nothing); }
+      if (look.headlights) {
+        const hx = T.w / 2 - 0.3, fz = T.len / 2 + 0.03;
+        setPart(vLight, n * 4, [0.4, 0.26, 0.08], [-hx, T.lightsY, fz]); setPart(vLight, n * 4 + 1, [0.4, 0.26, 0.08], [hx, T.lightsY, fz]);
+        setPart(vLight, n * 4 + 2, [0.36, 0.22, 0.08], [-hx, T.lightsY, -fz]); setPart(vLight, n * 4 + 3, [0.36, 0.22, 0.08], [hx, T.lightsY, -fz]);
+      }
     });
-    carBody.instanceMatrix.needsUpdate = carCab.instanceMatrix.needsUpdate = carWheel.instanceMatrix.needsUpdate = true;
+    for (const m of vehicleMeshes) m.instanceMatrix.needsUpdate = true;
   }
-  carBody.instanceColor.needsUpdate = carCab.instanceColor.needsUpdate = carWheel.instanceColor.needsUpdate = true;
+  const nothing = new THREE.Matrix4().makeScale(0, 0, 0);
   placeCars(0);
 
   /* ---------- people on the pavements ----------
@@ -372,7 +616,9 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   const pLegs = new THREE.InstancedMesh(kinds.box.geo, solid, PEOPLE), pTop = new THREE.InstancedMesh(kinds.box.geo, solid, PEOPLE);
   const pDress = new THREE.InstancedMesh(dressGeo, solid, PEOPLE), pHead = new THREE.InstancedMesh(kinds.box.geo, solid, PEOPLE);
   const pPram = new THREE.InstancedMesh(kinds.box.geo, solid, PEOPLE * 2);
-  const peopleMeshes = [pLegs, pTop, pDress, pHead, pPram], people = [];
+  const pHat = new THREE.InstancedMesh(kinds.box.geo, solid, PEOPLE), pTrim = new THREE.InstancedMesh(kinds.box.geo, solid, PEOPLE * 2);
+  const pBag = new THREE.InstancedMesh(kinds.box.geo, solid, PEOPLE);
+  const peopleMeshes = [pLegs, pTop, pDress, pHead, pPram, pHat, pTrim, pBag], people = [];
   for (const m of peopleMeshes) { m.castShadow = true; m.frustumCulled = false; m.visible = false; scene.add(m); }
   for (let i = 0; i < PEOPLE; i++) {
     const r = rand(), kind = r < 0.42 ? 'trousers' : r < 0.8 ? 'dress' : 'child';
@@ -380,22 +626,50 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     people.push({ bx, bz, kind, at: between(0, LAP), dir: pick([-1, 1]), speed: between(1.1, 2.2) * (kind === 'child' ? 1.25 : 1),
       size: kind === 'child' ? between(0.58, 0.7) : between(0.92, 1.08), pram: kind !== 'child' && rand() < 0.12, step: between(0, 6.28) });
     const top = pick(TOPS);
+    { const pr = people[people.length - 1], first = -HALF + ROAD + BLOCK / 2; pr.bi = Math.round((bx - first) / PITCH); pr.bj = Math.round((bz - first) / PITCH); }
     const coat = paint(top).clone();
     pLegs.setColorAt(i, paint(kind === 'dress' ? '#1b1b1b' : pick(LEGS)));
     pTop.setColorAt(i, coat); pDress.setColorAt(i, coat); pHead.setColorAt(i, tint.set(SKIN));
+    const me = people[people.length - 1];
+    me.hat = xmas && chance(0.3); me.bag = xmas && chance(0.35);
+    pHat.setColorAt(i, tint.set('#d4141c')); pTrim.setColorAt(i * 2, tint.set('#ffffff')); pTrim.setColorAt(i * 2 + 1, tint.set('#ffffff'));
+    pBag.setColorAt(i, tint.set(anyPick(BAGS)));
     pPram.setColorAt(i * 2, paint(pick(['#5a6472', '#1b1b1b', '#3f48cc']))); pPram.setColorAt(i * 2 + 1, paint('#2c3e50'));
   }
   for (const m of peopleMeshes) m.instanceColor.needsUpdate = true;
-  const nothing = new THREE.Matrix4().makeScale(0, 0, 0);
+  /* Walking. Each person goes round the edge of a block. At a corner, now and then, they cross the road
+     straight ahead on the zebra crossing to the next block and carry on round that one. */
+  const W2 = WALK * 2, GAP = 2 * (BLOCK / 2 - WALK) + ROAD, HEADS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  const CORNERS = [[-WALK, -WALK], [WALK, -WALK], [WALK, WALK], [-WALK, WALK]];
+  function walk(pr, dt) {
+    if (pr.cross) {
+      const c = pr.cross;
+      c.t = Math.min(1, c.t + pr.speed * dt / GAP);
+      const x = c.x0 + (c.x1 - c.x0) * c.t, z = c.z0 + (c.z1 - c.z0) * c.t;
+      if (c.t >= 1) { pr.bi += c.h[0]; pr.bj += c.h[1]; pr.bx += c.h[0] * PITCH; pr.bz += c.h[1] * PITCH; pr.at = c.at; pr.cross = null; }
+      return [x, z, Math.atan2(c.h[0], c.h[1]), 0.2];
+    }
+    const k = Math.min(3, Math.floor(pr.at / W2)), next = pr.at + pr.dir * pr.speed * dt;
+    const ended = pr.dir > 0 ? next >= (k + 1) * W2 : next < k * W2;
+    if (ended && Math.random() < 0.35) {
+      const h = HEADS[k].map(v => v * pr.dir), ni = pr.bi + h[0], nj = pr.bj + h[1];
+      if (ni >= 0 && ni < N && nj >= 0 && nj < N) {
+        const cn = CORNERS[pr.dir > 0 ? (k + 1) % 4 : k], x0 = pr.bx + cn[0], z0 = pr.bz + cn[1];
+        pr.cross = { x0, z0, x1: x0 + h[0] * GAP, z1: z0 + h[1] * GAP, t: 0, h, at: pr.dir > 0 ? k * W2 + 0.001 : (k + 1) * W2 - 0.001 };
+        return [x0, z0, Math.atan2(h[0], h[1]), TOP];
+      }
+    }
+    pr.at = ((next % LAP) + LAP) % LAP;
+    const side = Math.min(3, Math.floor(pr.at / W2)), d = pr.at - side * W2 - WALK;
+    const [lx, lz, heading] = [[d, -WALK, Math.PI / 2], [WALK, d, 0], [-d, WALK, -Math.PI / 2], [-WALK, -d, Math.PI]][side];
+    return [pr.bx + lx, pr.bz + lz, heading + (pr.dir < 0 ? Math.PI : 0), TOP];
+  }
   function placePeople(dt, t) {
     people.forEach((pr, i) => {
-      pr.at = ((pr.at + pr.dir * pr.speed * dt) % LAP + LAP) % LAP;
-      /* round the block: four sides, each 2 * WALK long */
-      const side = Math.floor(pr.at / (WALK * 2)), d = pr.at - side * WALK * 2 - WALK;
-      const [lx, lz, heading] = [[d, -WALK, Math.PI / 2], [WALK, d, 0], [-d, WALK, -Math.PI / 2], [-WALK, -d, Math.PI]][side];
-      q.setFromAxisAngle(UP, heading + (pr.dir < 0 ? Math.PI : 0));
+      const [wx, wz, yaw, ground] = walk(pr, dt);
+      q.setFromAxisAngle(UP, yaw);
       const bob = reduced ? 0 : Math.abs(Math.sin(t * 7 * pr.speed + pr.step)) * 0.07;
-      base.compose(p.set(pr.bx + lx, TOP + bob, pr.bz + lz), q, sc.set(pr.size, pr.size, pr.size));
+      base.compose(p.set(wx, ground + bob, wz), q, sc.set(pr.size, pr.size, pr.size));
       const dress = pr.kind === 'dress', legH = dress ? 0.42 : 0.62, bodyH = dress ? 0.8 : 0.6;
       pLegs.setMatrixAt(i, part.makeScale(dress ? 0.3 : 0.42, legH, dress ? 0.24 : 0.3).setPosition(0, legH / 2, 0).premultiply(base));
       pTop.setMatrixAt(i, dress ? nothing : part.makeScale(0.5, bodyH, 0.34).setPosition(0, legH + bodyH / 2, 0).premultiply(base));
@@ -403,6 +677,11 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
       pHead.setMatrixAt(i, part.makeScale(0.36, 0.36, 0.36).setPosition(0, legH + bodyH + 0.18, 0).premultiply(base));
       pPram.setMatrixAt(i * 2, pr.pram ? part.makeScale(0.46, 0.34, 0.62).setPosition(0, 0.42, 0.72).premultiply(base) : nothing);
       pPram.setMatrixAt(i * 2 + 1, pr.pram ? part.makeScale(0.46, 0.3, 0.3).setPosition(0, 0.72, 0.58).premultiply(base) : nothing);
+      const crown = legH + bodyH + 0.36;
+      pHat.setMatrixAt(i, pr.hat ? part.makeScale(0.32, 0.22, 0.32).setPosition(0, crown + 0.13, -0.03).premultiply(base) : nothing);
+      pTrim.setMatrixAt(i * 2, pr.hat ? part.makeScale(0.42, 0.08, 0.42).setPosition(0, crown + 0.03, 0).premultiply(base) : nothing);
+      pTrim.setMatrixAt(i * 2 + 1, pr.hat ? part.makeScale(0.12, 0.12, 0.12).setPosition(0.1, crown + 0.27, -0.13).premultiply(base) : nothing);
+      pBag.setMatrixAt(i, pr.bag ? part.makeScale(0.12, 0.3, 0.26).setPosition(dress ? 0.42 : 0.33, legH * 0.55, 0).premultiply(base) : nothing);
     });
     for (const m of peopleMeshes) m.instanceMatrix.needsUpdate = true;
   }
@@ -468,6 +747,8 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     autoRotate: !reduced, autoRotateSpeed: 0.35, enableZoom: false
   });
   /* Touch: one finger still scrolls the page; two fingers turn, zoom and pan the city. */
+  /* Mouse: drag slides the city like a map; right-drag (or Shift-drag) turns it; the wheel zooms. */
+  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
   controls.touches = { ONE: -1, TWO: THREE.TOUCH.DOLLY_PAN };
   canvas.style.touchAction = 'pan-y';
   /* Mouse wheel: it scrolls the page as usual until the visitor has clicked on the city, and goes back
@@ -559,17 +840,17 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
      build on a timer anyway, so the hero sign is never left waiting. */
   const buildTimer = built ? 0 : setTimeout(markBuilt, (total + 1.2) * 1000);
 
-  let glide = null;                                        // an eased move back to the opening view
+  let glide = null;                                        // an eased camera move: back to the opening view, or a pan
   function frame(now) {
     raf = requestAnimationFrame(frame);
     const real = (now - (last || now)) / 1000, dt = Math.min(0.05, real); last = now;
     clock += Math.min(0.5, real);                          // the build follows real time, so a slow frame rate cannot stall it
     if (!built) { setBuild(clock); if (clock >= total) markBuilt(); }
-    if (!reduced) { placeCars(dt); placePeople(dt, clock); stepFx(dt, clock); driftClouds(dt); }
+    if (!reduced) { placeCars(dt); placePeople(dt, clock); stepFx(dt, clock); driftClouds(dt); twinkle(clock); }
     if (glide) {
-      glide.t = Math.min(1, glide.t + dt / 0.9);
+      glide.t = Math.min(1, glide.t + dt / glide.dur);
       const k = 1 - Math.pow(1 - glide.t, 3);
-      camera.position.lerpVectors(glide.fromPos, HOME.pos, k); controls.target.lerpVectors(glide.fromTarget, HOME.target, k);
+      camera.position.lerpVectors(glide.fromPos, glide.toPos, k); controls.target.lerpVectors(glide.fromTarget, glide.toTarget, k);
       if (glide.t >= 1) glide = null;
     }
     controls.update();
@@ -588,6 +869,10 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   return {
     seed: usedSeed,
     weather: weatherName,
+    /* For testing: where every vehicle and person is right now. */
+    snapshot: () => ({ vehicles: cars.map(v => ({ type: v.type, mode: v.mode, d: v.d.join(','), at: along(v.path, v.s).map(n => +n.toFixed(2)) })),
+      crossing: people.filter(pr => pr.cross).length }),
+    seasons: { autumn: autumnTrees, christmas: xmas },
     finish: markBuilt,
     /* factor below 1 moves in, above 1 moves out */
     zoom(factor) {
@@ -601,14 +886,27 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
       offset.subVectors(camera.position, controls.target).applyAxisAngle(UP, angle);
       camera.position.copy(controls.target).add(offset);
     },
-    reset() { glide = { t: 0, fromPos: camera.position.clone(), fromTarget: controls.target.clone() }; },
+    reset() { glide = { t: 0, dur: 0.9, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), toPos: HOME.pos.clone(), toTarget: HOME.target.clone() }; },
+    /* Slide the view across the ground: right and forward are in steps, relative to the way the camera
+       faces, and a step is a fraction of how far away the camera is, so it feels the same at any zoom. */
+    pan(right, forward) {
+      controls.autoRotate = false;
+      const fromPos = glide ? glide.toPos.clone() : camera.position.clone(), fromTarget = glide ? glide.toTarget.clone() : controls.target.clone();
+      const fwd = new THREE.Vector3().subVectors(fromTarget, fromPos).setY(0).normalize();
+      const side = new THREE.Vector3().crossVectors(fwd, UP).normalize();
+      const step = fromPos.distanceTo(fromTarget) * 0.22;
+      const toTarget = fromTarget.clone().addScaledVector(side, right * step).addScaledVector(fwd, forward * step);
+      toTarget.x = Math.max(-260, Math.min(260, toTarget.x)); toTarget.z = Math.max(-260, Math.min(260, toTarget.z));
+      const toPos = fromPos.clone().add(toTarget.clone().sub(fromTarget));
+      glide = { t: 0, dur: 0.35, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), toPos, toTarget };
+    },
     stop() {
       stopped = true; pause(); watcher.disconnect(); clearTimeout(buildTimer);
       document.removeEventListener('visibilitychange', onVisibility); removeEventListener('resize', resize);
       controls.dispose(); renderer.dispose(); canvas.remove();
       for (const k of Object.values(kinds)) k.geo.dispose();
       dressGeo.dispose();
-      solid.dispose(); glass.dispose(); glowMat.dispose();
+      solid.dispose(); glass.dispose(); glowMat.dispose(); bulbMat.dispose(); lampMat.dispose(); lightMat.dispose();
       for (const e of extras) { e.geometry.dispose(); e.material.dispose(); }
       if (cloudGeo) { cloudGeo.dispose(); cloudMat.dispose(); }
       if (skyTexture) skyTexture.dispose();

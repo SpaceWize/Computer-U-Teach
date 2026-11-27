@@ -183,6 +183,13 @@ a{color:inherit}
 .built .has-city .view-controls{display:flex}
 .view-controls .hint{font-size:13px;font-weight:700;background:#fff;border:2px solid var(--color-ink);border-radius:var(--radius-brick);padding:6px 10px}
 .view-controls button{min-width:40px;padding:8px 10px}
+/* The move buttons sit together as a small arrow pad. */
+.view-controls .pad{display:inline-grid;grid-template-columns:repeat(3,40px);grid-template-rows:repeat(2,34px);gap:3px}
+.view-controls .pad button{min-width:0;min-height:0;padding:0;font-size:16px;line-height:1}
+#pan-up{grid-column:2;grid-row:1}
+#pan-left{grid-column:1;grid-row:2}
+#pan-down{grid-column:2;grid-row:2}
+#pan-right{grid-column:3;grid-row:2}
 html:not(.js) .controls{display:none}
 
 /* ================= MANUAL PAGES ================= */
@@ -278,9 +285,15 @@ h3.sub{font-family:var(--font-heading);font-size:24px;line-height:1.15;margin:40
   <div class="controls">
     <button type="button" id="skip">Skip animation</button>
     <div class="view-controls" role="group" aria-label="City view">
-      <span class="hint" id="city-hint">Drag to look around. Click the city, then scroll to zoom.</span>
-      <button type="button" id="turn-left" aria-label="Turn the view left">&#9664;</button>
-      <button type="button" id="turn-right" aria-label="Turn the view right">&#9654;</button>
+      <span class="hint" id="city-hint">Drag to move. Right-drag or Shift-drag to turn. Click, then scroll to zoom.</span>
+      <span class="pad" role="group" aria-label="Move the view">
+        <button type="button" id="pan-up" aria-label="Move the view forward">&#8593;</button>
+        <button type="button" id="pan-left" aria-label="Move the view left">&#8592;</button>
+        <button type="button" id="pan-down" aria-label="Move the view back">&#8595;</button>
+        <button type="button" id="pan-right" aria-label="Move the view right">&#8594;</button>
+      </span>
+      <button type="button" id="turn-left" aria-label="Turn the view left">&#8634;</button>
+      <button type="button" id="turn-right" aria-label="Turn the view right">&#8635;</button>
       <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
       <button type="button" id="zoom-out" aria-label="Zoom out">&minus;</button>
       <button type="button" id="view-reset">Reset view</button>
@@ -619,17 +632,20 @@ function runSvg(animate){
 }
 
 /* ---------- the city: a procedural brick town the visitor can explore (js/city.js) ---------- */
-const CITY_VERSION = '7';                                   // raise when js/city.js changes, so browsers fetch it
+const CITY_VERSION = '17';                                   // raise when js/city.js changes, so browsers fetch it
 const hero = document.querySelector('.hero');
 let city = null;
-/* Weather is picked inside js/city.js. ?weather=clear|sun|rain|snow|tech forces one. */
+/* Weather is picked inside js/city.js. ?weather=clear|sun|rain|snow|tech forces one, and
+   ?date=2026-12-10 pretends it is another day (for autumn and Christmas). */
 async function runCity(weather = params.get('weather'), seed = params.get('city')){
   const { startCity } = await import('./js/city.js?v=' + CITY_VERSION);
   wall.innerHTML = ''; wall.classList.remove('still');
-  city = await startCity({ container: wall, reduced, onBuilt: reveal, seed, weather });
+  city = await startCity({ container: wall, reduced, onBuilt: reveal, seed, weather, date: params.get('date') });
   hero.classList.add('has-city');
+  window.__city = city;                          // for testing in the browser console
   hero.dataset.weather = city.weather;
-  if (matchMedia('(pointer: coarse)').matches) document.getElementById('city-hint').textContent = 'Use two fingers to move the city.';
+  hero.dataset.season = [city.seasons.autumn && 'autumn', city.seasons.christmas && 'christmas'].filter(Boolean).join(' ');
+  if (matchMedia('(pointer: coarse)').matches) document.getElementById('city-hint').textContent = 'Use two fingers to move and zoom the city.';
   finish = () => { city.finish(); reveal(); };
   stop = () => { city.stop(); city = null; hero.classList.remove('has-city'); };
 }
@@ -647,7 +663,8 @@ addEventListener('keydown', e => {
   stop(); stop = () => {};
   runCity(next, seed).catch(err => console.warn('Could not rebuild the city', err));
 });
-for (const [id, act] of [['turn-left', c => c.turn(-0.35)], ['turn-right', c => c.turn(0.35)], ['zoom-in', c => c.zoom(0.7)],
+for (const [id, act] of [['pan-up', c => c.pan(0, 1)], ['pan-down', c => c.pan(0, -1)], ['pan-left', c => c.pan(-1, 0)], ['pan-right', c => c.pan(1, 0)],
+  ['turn-left', c => c.turn(-0.35)], ['turn-right', c => c.turn(0.35)], ['zoom-in', c => c.zoom(0.7)],
   ['zoom-out', c => c.zoom(1.45)], ['view-reset', c => c.reset()]])
   document.getElementById(id).addEventListener('click', () => city && act(city));
 
