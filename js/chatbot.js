@@ -7,7 +7,7 @@
 
 /* Browsers hold on to script files. Raise this number (and the two ?v= numbers in index.html) whenever
    minifig.js, knowledge.js, chatbot.js or chatbot.css changes, so visitors get the new files. */
-const ASSET_VERSION = '5';
+const ASSET_VERSION = '6';
 const BOT_NAME = 'Fixer';                                  // TODO: confirm the helper's name with the owner
 const STARTERS = ['Repair prices', 'Book a repair', 'Lessons'];
 const GREETING = `Hi, I'm ${BOT_NAME}, the shop's brick helper. I'm not a person or an AI: I answer from a short list about repairs, prices, lessons and how to reach us.`;
@@ -229,8 +229,8 @@ launcher.addEventListener('focus', () => figure && figure.wave());
 async function startFigure() {
   const probe = document.createElement('canvas');
   if (!(probe.getContext('webgl2') || probe.getContext('webgl'))) return;      // the flat SVG figure stays
-  const [THREE, { RoomEnvironment }, { buildMinifig, lightFigure }] = await Promise.all([
-    import('three'), import('three/addons/environments/RoomEnvironment.js'), import('./minifig.js?v=' + ASSET_VERSION)
+  const [THREE, { buildMinifig, lightFigure }] = await Promise.all([
+    import('three'), import('./minifig.js?v=' + ASSET_VERSION)
   ]);
   const weak = (navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2);
   const still = reducedMotion || weak;                    // still = pose changes are drawn, but nothing loops
@@ -247,7 +247,7 @@ async function startFigure() {
   hang.add(fig.group);
   stand.add(hang);
   scene.add(stand);
-  lightFigure(THREE, renderer, scene, RoomEnvironment);
+  lightFigure(THREE, renderer, scene);
 
   const CANVAS_ROOM = 2;
   const camera = new THREE.PerspectiveCamera(24, 1, 1, 500);
@@ -495,6 +495,7 @@ async function startFigure() {
     talk() { talkUntil = nowT() + 0.7; }
   };
   if (still) stand.rotation.y = -0.38;
+  if (renderer.compileAsync) await renderer.compileAsync(scene, camera);
   draw();
   launcher.classList.add('is-3d');
   run();

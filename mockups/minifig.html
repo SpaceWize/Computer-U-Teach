@@ -26,7 +26,6 @@
 <div class="labels"><span>FRONT</span><span>RIGHT</span><span>BACK</span><span>LEFT</span></div>
 <script type="module">
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildMinifig, lightFigure } from '../js/minifig.js?v=5';
 
 const canvas = document.getElementById('c');
@@ -38,7 +37,7 @@ renderer.setScissorTest(true);
 const scene = new THREE.Scene();
 const fig = buildMinifig(THREE);
 scene.add(fig.group);
-lightFigure(THREE, renderer, scene, RoomEnvironment);
+lightFigure(THREE, renderer, scene);
 if (new URLSearchParams(location.search).has('wire'))
   fig.group.traverse(o => { if (o.isMesh) { o.material = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }); } });
 

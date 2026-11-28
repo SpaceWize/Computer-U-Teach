@@ -41,8 +41,8 @@ export function buildMinifig(THREE, options = {}) {
   const keep = (list, item) => { list.push(item); return item; };
 
   // Glossy moulded plastic
-  const plastic = color => keep(materials, new THREE.MeshPhysicalMaterial({
-    color, roughness: 0.34, metalness: 0, clearcoat: 0.2, clearcoatRoughness: 0.35
+  const plastic = color => keep(materials, new THREE.MeshStandardMaterial({
+    color, roughness: 0.34, metalness: 0
   }));
   const M = {};
   for (const k of ['skin', 'torso', 'arms', 'belt', 'legs', 'boots', 'headset', 'cap']) M[k] = plastic(C[k]);
@@ -111,7 +111,7 @@ export function buildMinifig(THREE, options = {}) {
 
   const print = makeTorsoPrint(THREE, C);
   keep(textures, print);
-  const decal = mesh(new THREE.PlaneGeometry(10.2, 10.2), keep(materials, new THREE.MeshPhysicalMaterial({
+  const decal = mesh(new THREE.PlaneGeometry(10.2, 10.2), keep(materials, new THREE.MeshStandardMaterial({
     map: print, transparent: true, roughness: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2
   })));
   decal.position.set(0, torsoY + D.torsoH / 2, D.torsoD / 2 + 0.02);
@@ -137,7 +137,7 @@ export function buildMinifig(THREE, options = {}) {
   // printed face
   const face = makeFace(THREE);
   keep(textures, face);
-  const faceDecal = mesh(new THREE.PlaneGeometry(10.4, 8.4), keep(materials, new THREE.MeshPhysicalMaterial({
+  const faceDecal = mesh(new THREE.PlaneGeometry(10.4, 8.4), keep(materials, new THREE.MeshStandardMaterial({
     map: face, transparent: true, roughness: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2
   })));
   faceDecal.position.set(0, D.headH / 2 - 0.75, D.headD / 2 + 0.02);
@@ -174,7 +174,7 @@ export function buildMinifig(THREE, options = {}) {
   button.scale.y = 0.55; button.position.y = capBase + capH - 0.05;
   head.add(button);
   // a small white patch on the front of the cap
-  const patch = mesh(block(3.4, 2.0, 0.5, 0.5), keep(materials, new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.4 })));
+  const patch = mesh(block(3.4, 2.0, 0.5, 0.5), keep(materials, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.4 })));
   patch.position.set(0, capBase + capH / 2 + 0.35, (D.headD + 0.7) / 2);
   head.add(patch);
   group.add(head);
@@ -293,18 +293,14 @@ function makeTorsoPrint(THREE, C) {
   return t;
 }
 
-// Shared studio lighting, so the figure looks the same wherever it is shown.
-// Pass the RoomEnvironment class from three/addons/environments/RoomEnvironment.js.
-export function lightFigure(THREE, renderer, scene, RoomEnvironment) {
+// Shared studio lighting, so the figure looks the same wherever it is shown. Plain lights only: building
+// a reflection map here used to stall the page for about a sixth of a second when Fixer appeared.
+export function lightFigure(THREE, renderer, scene) {
   renderer.toneMapping = THREE.NoToneMapping;          // keep the toy colours saturated
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  pmrem.dispose();
-  if ('environmentIntensity' in scene) scene.environmentIntensity = 0.34;
-  scene.traverse(o => { if (o.isMesh && o.material && 'envMapIntensity' in o.material) o.material.envMapIntensity = 0.34; });
-  const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(-40, 70, 90);
-  const fill = new THREE.DirectionalLight(0xffffff, 0.5); fill.position.set(60, 20, 60);
-  const amb = new THREE.AmbientLight(0xffffff, 0.35);
-  scene.add(key, fill, amb);
-  return { key, fill, amb };
+  const sky = new THREE.HemisphereLight(0xeaf2ff, 0x6b6258, 1.15);
+  const key = new THREE.DirectionalLight(0xffffff, 1.9); key.position.set(-40, 70, 90);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.65); fill.position.set(60, 20, 60);
+  const rim = new THREE.DirectionalLight(0xffffff, 0.45); rim.position.set(0, 40, -80);
+  scene.add(sky, key, fill, rim);
+  return { sky, key, fill, rim };
 }

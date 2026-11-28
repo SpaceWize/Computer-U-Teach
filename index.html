@@ -18,7 +18,7 @@
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
 } }
 </script>
-<link rel="stylesheet" href="css/chatbot.css?v=5">
+<link rel="stylesheet" href="css/chatbot.css?v=6">
 <style>
 :root{
   /* Palette sampled from the user's doodles */
@@ -78,8 +78,7 @@ a{color:inherit}
     repeating-linear-gradient(#3b3b40 0 5px,#9a9aa2 5px 8px) right / 5px 100% no-repeat}
 #plate-title{--hang:38px}
 #plate-info{--hang:30px}
-.built .hero-ui{animation:sign-sway 7s ease-in-out 2.4s infinite;transform-origin:50% -38px}
-@keyframes sign-sway{0%,100%{transform:rotate(-.45deg)}50%{transform:rotate(.45deg)}}
+/* No swaying: animating the sign as a whole made Chrome draw its lowest row of headline bricks grey. */
 @media (min-width:900px){
   .stage{justify-items:start;padding-left:clamp(64px,7vw,130px)}
 }
@@ -250,7 +249,7 @@ h3.sub{font-family:var(--font-heading);font-size:24px;line-height:1.15;margin:40
 
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
-  .wall .row,.built .plate,.built .brick-word .on,.built .word-layer,.built .hero-ui{animation:none}
+  .wall .row,.built .plate,.built .brick-word .on,.built .word-layer{animation:none}
   .press,.brick-btn.box,.brick-btn.box > .cast{transition:none}
   .press:hover,.press:active{transform:perspective(220px) rotateX(12deg)}
 }
@@ -266,7 +265,7 @@ h3.sub{font-family:var(--font-heading);font-size:24px;line-height:1.15;margin:40
   <span class="sign-post" aria-hidden="true"></span><span class="sign-arm" aria-hidden="true"></span>
   <div class="hero-ui" id="hero-ui">
     <div class="plate studded" id="plate-title">
-      <h1 id="hero-title"><span id="hero-text">We fix it.</span><span class="brick-word" id="brick-word" aria-hidden="true"></span></h1>
+      <h1 id="hero-title"><span id="hero-text">Builders fix it best.</span><span class="brick-word" id="brick-word" aria-hidden="true"></span></h1>
       <nav aria-label="Jump to a section">
         <ul class="jump">
           <li><a class="brick-btn" href="#repairs">Repair services</a></li>
@@ -424,7 +423,6 @@ h3.sub{font-family:var(--font-heading);font-size:24px;line-height:1.15;margin:40
 </footer>
 
 <script type="module">
-const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 const root = document.documentElement;
 const wall = document.getElementById('wall');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -437,22 +435,30 @@ const camDist = h => (h / 2) / Math.tan(FOV / 2 * Math.PI / 180);
 const GLYPHS = {
   W:['10001','10001','10101','11011','10001'], E:['1111','1000','1110','1000','1111'],
   F:['1111','1000','1110','1000','1000'],      I:['111','010','010','010','111'],
-  X:['10001','01010','00100','01010','10001'], T:['11111','00100','00100','00100','00100']
+  X:['10001','01010','00100','01010','10001'], T:['11111','00100','00100','00100','00100'],
+  B:['1110','1001','1110','1001','1110'],     U:['1001','1001','1001','1001','1111'],
+  L:['1000','1000','1000','1000','1111'],     D:['1110','1001','1001','1001','1110'],
+  R:['1110','1001','1110','1010','1001'],     S:['1111','1000','1111','0001','1111']
 };
-const HEADLINE = 'WE FIX IT';
+const HEADLINE = 'BUILDERS FIX IT BEST';
 // Brick colour by length: 1 stud red, 2 blue, 3 yellow, 5 green.
 const BRICK_COLORS = { 1: '#ed1c24', 2: '#3f48cc', 3: '#fff200', 5: '#0ed145' };
-/* The sign's headline is two colours: white, with one word in the same yellow as the Book a repair
-   button, so yellow means "the fixing" and nothing else. (Colour by brick length lives on in the
-   fallback wall.) */
-const HEADLINE_COLORS = { base: '#ffffff', accent: '#fff200' }, HEADLINE_ACCENT = 'FIX';
+/* The sign's headline is two colours: white, with "FIX IT" in the same yellow as the
+   Book a repair button. (Colour by brick length lives on in the fallback wall.) */
+const HEADLINE_COLORS = { base: '#ffffff', accent: '#fff200' }, HEADLINE_ACCENT = new Set(['FIX', 'IT']);
 // How each letter is laid in bricks, as [column, row, width, height] in studs. From the owner's markup.
 const BRICKS = {
   W: [[0,0,1,5],[4,0,1,5],[2,2,1,1],[1,3,1,1],[3,3,1,1]],
   E: [[0,0,1,5],[1,0,3,1],[1,2,1,1],[2,2,1,1],[1,4,3,1]],
   F: [[0,0,1,5],[1,0,3,1],[1,2,1,1],[2,2,1,1]],
   I: [[0,0,3,1],[1,1,1,3],[0,4,3,1]],
-  T: [[0,0,5,1],[2,1,1,2],[2,3,1,2]]
+  T: [[0,0,5,1],[2,1,1,2],[2,3,1,2]],
+  B: [[0,0,1,5],[1,0,2,1],[3,1,1,1],[1,2,2,1],[3,3,1,1],[1,4,2,1]],
+  U: [[0,0,1,5],[3,0,1,5],[1,4,2,1]],
+  L: [[0,0,1,5],[1,4,3,1]],
+  D: [[0,0,1,5],[1,0,2,1],[3,1,1,3],[1,4,2,1]],
+  R: [[0,0,1,5],[1,0,2,1],[3,1,1,1],[1,2,2,1],[2,3,1,1],[3,4,1,1]],
+  S: [[0,0,4,1],[0,1,1,1],[0,2,4,1],[3,3,1,1],[0,4,4,1]]
 };
 // Letters without a layout (X, and any new letter) are laid as single studs.
 function bricksOf(ch){
@@ -479,8 +485,12 @@ function buildHero(){
   const vw = document.documentElement.clientWidth, small = vw < 640;
   // u = one stud. Everything below is placed in whole studs, so it lines up with the plate.
   /* On a wide screen the sign takes under half the width, leaving the city in view beside it. */
-  const u = small ? Math.max(11, Math.min(16, Math.floor((vw - 28) / 24))) : 14;
-  const cols = small ? Math.floor((vw - 28) / u) : Math.max(28, Math.min(42, Math.floor(Math.min(vw * 0.44, 600) / u)));
+  /* The longest word has to fit across the plate, so on a narrow screen the studs get smaller. */
+  const avail = small ? vw - 28 : Math.min(vw * 0.44, 600);
+  const longest = Math.max(...HEADLINE.split(' ').map(w => [...w].reduce((n, ch) => n + (GLYPHS[ch] ? GLYPHS[ch][0].length + 1 : 0), -1))) + 2;
+  let u = small ? Math.max(11, Math.min(16, Math.floor(avail / 24))) : 14;
+  if (small && Math.floor(avail / u) < longest) u = Math.max(6, Math.floor(avail / longest));   // desktop keeps its stud size and widens the plate instead
+  const cols = small ? Math.floor(avail / u) : Math.max(Math.max(28, longest), Math.min(42, Math.floor(avail / u)));
   if (heroKey === u + ':' + cols) return;
   heroKey = u + ':' + cols;
   ui.style.setProperty('--u', u + 'px');
@@ -506,7 +516,7 @@ function buildHero(){
       for (const ch of w) {
         const g = GLYPHS[ch];
         for (const b of bricksOf(ch)) {
-          const c = w.join('') === HEADLINE_ACCENT ? HEADLINE_COLORS.accent : HEADLINE_COLORS.base, dark = darken(c, 0.55);
+          const c = HEADLINE_ACCENT.has(w.join('')) ? HEADLINE_COLORS.accent : HEADLINE_COLORS.base, dark = darken(c, 0.55);
           html += `<span class="on studded" style="grid-column:${x + b.c + 1} / span ${b.w};grid-row:${y + b.r + 1} / span ${b.h};--c:${c};--n:${n++}"></span>`;
           rects += `<rect x="${(x + b.c) * u}" y="${(y + b.r) * u}" width="${b.w * u}" height="${b.h * u}" fill="${dark}"/>`;
         }
@@ -533,7 +543,7 @@ function buildHero(){
 
   y += 1;
   const jumps = [...plate.querySelectorAll('.brick-btn')];
-  const bw = Math.min(inner, small ? 13 : 11);
+  const bw = Math.min(inner, Math.max(small ? 13 : 11, Math.ceil(150 / u)));
   if (jumps.length * bw + (jumps.length - 1) <= inner) {
     let x = Math.floor((cols - (jumps.length * bw + jumps.length - 1)) / 2);
     jumps.forEach(a => { put(a, x, y, bw, 2); x += bw + 1; });
@@ -555,7 +565,7 @@ function buildHero(){
   Object.assign(tile.style, { left: px(1), top: px(1), width: px(cols2 - 2), height: 'auto' });
   const k = Math.max(2, Math.ceil((tile.offsetHeight + u * 0.6) / u));
   tile.style.height = px(k);
-  const cw = Math.min(cols2 - 4, 14);
+  const cw = Math.min(cols2 - 2, Math.max(14, Math.ceil(175 / u)));
   put(cta, Math.floor((cols2 - cw) / 2), 1 + k + 1, cw, 3);
   info.style.height = px(1 + k + 1 + 3 + 1);
   box(tile, 5); box(cta, Math.round(u * 1.7)); box(info, standoff);
@@ -632,7 +642,7 @@ function runSvg(animate){
 }
 
 /* ---------- the city: a procedural brick town the visitor can explore (js/city.js) ---------- */
-const CITY_VERSION = '23';                                   // raise when js/city.js changes, so browsers fetch it
+const CITY_VERSION = '24';                                   // raise when js/city.js changes, so browsers fetch it
 const hero = document.querySelector('.hero');
 let city = null;
 /* Weather is picked inside js/city.js. ?weather=clear|sun|rain|snow|tech forces one, and
@@ -690,6 +700,6 @@ async function start(){
 document.getElementById('skip').addEventListener('click', () => finish());
 start();
 </script>
-<script type="module" src="js/chatbot.js?v=5"></script>
+<script type="module" src="js/chatbot.js?v=6"></script>
 </body>
 </html>

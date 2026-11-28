@@ -16,8 +16,7 @@ const C = {
   road: '#4a4d55', line: '#f4f4f4', pavement: '#cfd3d8', asphalt: '#3c3f46',
   glass: '#8fd0f2', glassDark: '#2c3e50', tyre: '#1b1b1b', trunk: '#7a4a21',
   leaf: '#2f9e44', leafLight: '#55c05a', water: '#3aa0e8',
-  wheatSoil: '#dcb95a', wheat: '#f4c531', soil: '#8a5a2b', soilLight: '#a06a35', crop: '#3f9b3a', pasture: '#8ed068',
-  barn: '#c8102e', roof: '#6b7078', white: '#ffffff', silo: '#d9dde2', hay: '#e9c23c', tractor: '#1f8f3a'
+  barn: '#c8102e', roof: '#6b7078', white: '#ffffff', silo: '#d9dde2'
 };
 const WALLS = ['#f4f1e8', '#e9e2cf', '#d8dde3', '#ed1c24', '#3f48cc', '#fff200', '#00a8f3', '#f28c28', '#9ad0c2', '#b23a48', '#f6b7c1', '#7d8fa3'];
 const CARS = ['#ed1c24', '#3f48cc', '#fff200', '#0ed145', '#ffffff', '#f28c28', '#1b1b1b', '#00a8f3'];
@@ -32,22 +31,19 @@ const LOOKS = {
   /* Sunny: a deep blue sky fading to a pale horizon, hard warm light with darker shadows, saturated
      colours, and the shadows of high clouds sweeping across the city. */
   sun: { sky: '#cdeeff', skyTop: '#2f8fff', fog: [600, 1500], hemi: ['#d8efff', '#7d8f4a', 1.05], sun: ['#ffe0a0', 3.7], cloudShadows: true,
-    map: { grass: '#6fd23e', grassDark: '#55b832', lawn: '#82e04c', pasture: '#93dc5e', wheat: '#ffcc1f', wheatSoil: '#e8c25a',
-      water: '#1fb2ff', leafLight: '#4fd04f', leaf: '#21a83a', pavement: '#dde1e6' } },
+    map: { grass: '#6fd23e', grassDark: '#55b832', lawn: '#82e04c', water: '#1fb2ff', leafLight: '#4fd04f', leaf: '#21a83a', pavement: '#dde1e6' } },
   rain: { sky: '#8e9aa8', fog: [200, 820], hemi: ['#c9d3de', '#5f6b5a', 1.25], sun: ['#dfe8f2', 0.95], particles: 'rain', puddles: true,
-    map: { grass: '#57a03c', grassDark: '#46883a', lawn: '#62ad46', pasture: '#73b357', road: '#2f3239', asphalt: '#292c32',
-      pavement: '#a3a9b1', wheatSoil: '#bf9f48', wheat: '#d6a92a', soil: '#6e4622', soilLight: '#7f5329' } },
+    map: { grass: '#57a03c', grassDark: '#46883a', lawn: '#62ad46', road: '#2f3239', asphalt: '#292c32',
+      pavement: '#a3a9b1' } },
   snow: { sky: '#d3dce6', fog: [280, 950], hemi: ['#eef4ff', '#b3bdc8', 1.6], sun: ['#f3f6ff', 1.7], particles: 'snow', snowCaps: true,
-    map: { grass: SNOW, grassDark: '#e8eef3', lawn: SNOW, pasture: SNOW, wheatSoil: SNOW, soil: '#e3e9ee', soilLight: '#e3e9ee', crop: '#dbe3ea',
-      wheat: '#eef2f6', leafLight: '#dfe8ec', hay: '#f0f3f6', pavement: '#e6ebf0', water: '#c7e3f3', road: '#5d616a' },
-    kinds: { pyramid: SNOW, roof: SNOW } },
+    map: { grass: SNOW, grassDark: '#e8eef3', lawn: SNOW, leafLight: '#dfe8ec', pavement: '#e6ebf0', water: '#c7e3f3', road: '#5d616a' },
+    kinds: { pyramid: SNOW } },
   /* The easter egg: the same city at night, built from dark tech parts with glowing windows and lines. */
   tech: { sky: '#060a18', fog: [380, 1100], hemi: ['#4a6cff', '#05070f', 0.55], sun: ['#9fb6ff', 0.7], stars: true, grid: true, neonRims: true, headlights: true,
     glow: ['line'], litGlass: true,
-    map: { grass: '#0b1224', grassDark: '#0b1224', lawn: '#0f1a30', pasture: '#0f1a30', wheatSoil: '#0b1224', soil: '#0b1224', soilLight: '#0b1224',
-      road: '#090d1a', asphalt: '#090d1a', pavement: '#18203a', line: '#29f0ff', glassDark: '#04060d', tyre: '#04060d', trunk: '#2a3350',
-      leaf: '#1df2a0', leafLight: '#14c98a', water: '#29f0ff', wheat: '#ff3df2', crop: '#7a5cff', barn: '#ff3df2', roof: '#2a3350',
-      white: '#cfe8ff', silo: '#2a3350', hay: '#7a5cff', tractor: '#29f0ff' },
+    map: { grass: '#0b1224', grassDark: '#0b1224', lawn: '#0f1a30', road: '#090d1a', asphalt: '#090d1a', pavement: '#18203a', line: '#29f0ff', glassDark: '#04060d', tyre: '#04060d', trunk: '#2a3350',
+      leaf: '#1df2a0', leafLight: '#14c98a', water: '#29f0ff', barn: '#ff3df2', roof: '#2a3350',
+      white: '#cfe8ff', silo: '#2a3350' },
     walls: ['#141a2b', '#1c2438', '#232c44', '#0f1422', '#2a3350'],
     neon: ['#29f0ff', '#ff3df2', '#ffb020', '#1df2a0', '#7a5cff'],
     windows: ['#29f0ff', '#ff3df2', '#ffb020', '#29f0ff', '#1b2440', '#1b2440'] }
@@ -85,7 +81,7 @@ const DUSK = {
     sun: ['#ff8a50', 0.22], sunPos: [200, 25, 120], warmWindows: true, headlights: true, streetLamps: true },
   /* Clear at Christmas is overcast, not sunny. */
   clear: { sky: '#8a6a70', skyMid: '#363a62', skyTop: '#0e1434', fogColor: '#4a4458', hemi: ['#6a74a8', '#34303a', 0.55], sun: ['#ff9d6a', 0.12],
-    map: { grass: '#668f4c', grassDark: '#557a40', lawn: '#729b56', leafLight: '#5d8f4c', pasture: '#6f9452' } },
+    map: { grass: '#668f4c', grassDark: '#557a40', lawn: '#729b56', leafLight: '#5d8f4c' } },
   snow: { sky: '#a87882', skyMid: '#463e78', skyTop: '#0e163e', fogColor: '#5b5470', hemi: ['#7480c0', '#4d4860', 0.6], sun: ['#ffa070', 0.2] },
   rain: { sky: '#4e4652', skyMid: '#2a2c40', skyTop: '#0c1020', fogColor: '#353342', fog: [200, 760], hemi: ['#56607e', '#25252c', 0.42], sun: ['#d08060', 0.1] }
 };
@@ -188,7 +184,6 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   if (look.warmWindows && glass.emissive) { glass.emissive.set('#ffb347'); glass.emissiveIntensity = 0.62; }   // lamps on inside
   const glowMat = new THREE.MeshBasicMaterial();         // unlit: shows its colour at full strength
   const bulbMat = new THREE.MeshBasicMaterial(), lampMat = new THREE.MeshBasicMaterial();
-  const roofGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 3); roofGeo.rotateX(-Math.PI / 2);      // ridge along Z, apex up
   const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 12); wheelGeo.rotateZ(Math.PI / 2);   // axle along X
   const kinds = {
     box: { geo: new THREE.BoxGeometry(1, 1, 1), mat: solid, items: [] },
@@ -197,14 +192,12 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     stud: { geo: new THREE.CylinderGeometry(0.5, 0.5, 1, 8), mat: solid, items: [] },
     cone: { geo: new THREE.ConeGeometry(0.5, 1, 8), mat: solid, items: [] },
     pyramid: { geo: new THREE.ConeGeometry(0.7071, 1, 4, 1, false, Math.PI / 4), mat: solid, items: [] },
-    wheat: { geo: new THREE.ConeGeometry(0.5, 1, 5), mat: solid, items: [] },
-    roof: { geo: roofGeo, mat: solid, items: [] },
     wheel: { geo: wheelGeo, mat: solid, items: [] },
     glow: { geo: new THREE.BoxGeometry(1, 1, 1), mat: glowMat, items: [] },
     bulb: { geo: new THREE.BoxGeometry(1, 1, 1), mat: bulbMat, items: [] },
     lamp: { geo: new THREE.BoxGeometry(1, 1, 1), mat: lampMat, items: [] }
   };
-  const UP = new THREE.Vector3(0, 1, 0), mx = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+  const UP = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
   // Every piece is placed by the centre of its base. group ties it to a building so it can rise with it.
   const eul = new THREE.Euler();
   function put(kind, x, y, z, sx, sy, sz, color, group = -1, turn = 0, tilt = 0) {
@@ -217,12 +210,6 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   const cyl = (x, y, z, r, h, color, g) => put('cyl', x, y, z, r * 2, h, r * 2, color, g);
   const stud = (x, y, z, color, g) => put('stud', x, y, z, 0.6, 0.2, 0.6, color, g);
   const cone = (x, y, z, r, h, color, g) => put('cone', x, y, z, r * 2, h, r * 2, color, g);
-  // Roof prism: base w wide, h high, len long. Its geometry is centred differently, so it is placed directly.
-  function ridge(x, y, z, w, h, len, color, g, turn = 0) {
-    q.setFromAxisAngle(UP, turn);
-    const sy = h / 0.75;
-    kinds.roof.items.push({ m: new THREE.Matrix4().compose(p.set(x, y + 0.25 * sy, z), q, sc.set(w / 0.866, sy, len)), c: recolor(color, 'roof'), g });
-  }
 
   const groups = [];                                     // one per building: when it starts to rise
   const newGroup = (x, z) => groups.push({ start: Math.hypot(x, z) * 0.011 + rand() * 0.3 }) - 1;
@@ -864,7 +851,11 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   });
   sigPole.instanceColor.needsUpdate = sigHead.instanceColor.needsUpdate = true;
   const LIT = ['#ff2a2a', '#ffb020', '#22ff66'], DARK = ['#3a1414', '#3a2a0c', '#0f3a1c'];
+  let signalKey = '';
   function paintSignals() {
+    const now = heads.map(h => signalAt(h.key, h.axis)[0]).join('');
+    if (now === signalKey) return;                        // nothing changed since the last frame
+    signalKey = now;
     heads.forEach((h, n) => {
       const st = signalAt(h.key, h.axis), on = st === 'red' ? 0 : st === 'amber' ? 1 : 2;
       for (let k = 0; k < 3; k++) sigLamp.setColorAt(n * 3 + k, tint.set(k === on ? LIT[k] : DARK[k]));
