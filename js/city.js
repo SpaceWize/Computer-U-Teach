@@ -206,10 +206,11 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   };
   const UP = new THREE.Vector3(0, 1, 0), mx = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
   // Every piece is placed by the centre of its base. group ties it to a building so it can rise with it.
-  function put(kind, x, y, z, sx, sy, sz, color, group = -1, turn = 0) {
+  const eul = new THREE.Euler();
+  function put(kind, x, y, z, sx, sy, sz, color, group = -1, turn = 0, tilt = 0) {
     if (kind === 'box' && glowSet.has(color)) kind = 'glow';
     color = recolor(color, kind);
-    q.setFromAxisAngle(UP, turn);
+    q.setFromEuler(eul.set(tilt, turn, 0, 'YXZ'));
     kinds[kind].items.push({ m: new THREE.Matrix4().compose(p.set(x, y + sy / 2, z), q, sc.set(sx, sy, sz)), c: color, g: group });
   }
   const box = (x, y, z, w, h, d, color, g, turn) => put('box', x, y, z, w, h, d, color, g, turn);
@@ -290,7 +291,25 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   }
 
   /* ---------- ground and roads ---------- */
-  box(0, -1.2, 0, 2600, 1.2, 2600, C.grass);
+  /* The railway loop (see "railway" below) dips under each main road: an open cutting slopes down on
+     each side, and the middle, under the road, is a covered tunnel. The ground is laid in pieces that
+     leave those cuttings open. */
+  const RING = 80, RC = 14, RS = RING - RC, BR = 16, FAR_RAIL = 400;
+  const COVER = 9, RAMP_END = 22, DEPTH = 5, CUT_W = 3;     // tunnel where |d| < 9, ramps from 9 to 22, 5 deep
+  const cuts = [];
+  for (const sd of [-1, 1]) for (const [a0, a1] of [[COVER, RAMP_END], [-RAMP_END, -COVER]]) {
+    cuts.push([a0, a1, sd * RING - CUT_W, sd * RING + CUT_W]);      // [x0, x1, z0, z1]: top and bottom of the loop
+    cuts.push([sd * RING - CUT_W, sd * RING + CUT_W, a0, a1]);      // left and right
+  }
+  {
+    const xs = [...new Set([-1300, 1300, ...cuts.flatMap(c => [c[0], c[1]])])].sort((a, b) => a - b);
+    const zs = [...new Set([-1300, 1300, ...cuts.flatMap(c => [c[2], c[3]])])].sort((a, b) => a - b);
+    for (let a = 1; a < xs.length; a++) for (let b = 1; b < zs.length; b++) {
+      const mx = (xs[a - 1] + xs[a]) / 2, mz = (zs[b - 1] + zs[b]) / 2;
+      if (cuts.some(c => mx > c[0] && mx < c[1] && mz > c[2] && mz < c[3])) continue;
+      box(mx, -1.2, mz, xs[a] - xs[a - 1], 1.2, zs[b] - zs[b - 1], C.grass);
+    }
+  }
   box(0, 0, 0, HALF * 2, 0.2, HALF * 2, C.road);                               // the city sits on its roads
   for (const s of [-1, 1]) {                                                    // two roads run on out to the horizon
     box(0, 0, s * (HALF + 340), ROAD, 0.2, 680, C.road);
@@ -311,6 +330,191 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     const r = 0.7 + Math.random() * 1.2, across = (Math.random() - 0.5) * 3;
     Math.random() < 0.5 ? cyl(line + across, 0.2, along, r, 0.03, '#8ea3b6') : cyl(along, 0.2, line + across, r, 0.03, '#8ea3b6');
   }
+
+  /* ---------- railway ----------
+     A loop of track round the town in the green margin, with three branch lines running off the map:
+     north, east and south. Where the loop meets a main road it slopes down into an open cutting, runs
+     through a covered tunnel under the road, and climbs back up the other side. Straight track is laid
+     as long brick pieces; curves are separate, lighter curved pieces set end to end along it. The
+     stations and the cargo yard are on the town side of the track, each joined to the town by a sidewalk
+     and a zebra crossing over the outer road. All trains run the same way round the loop. */
+  const TUNNEL = COVER;
+  const arcPts = (cx, cz, r, a0, a1, n) => Array.from({ length: n + 1 }, (_, k) => { const a = a0 + (a1 - a0) * k / n; return [cx + Math.cos(a) * r, cz + Math.sin(a) * r]; });
+  const inTunnel = (x, z) => (Math.abs(x) < TUNNEL && Math.abs(Math.abs(z) - RING) < 12) || (Math.abs(z) < TUNNEL && Math.abs(Math.abs(x) - RING) < 12);
+  const smooth = t => t * t * (3 - 2 * t);
+  /* Height of the rails: 0 at ground level, sloping down to -DEPTH through the cuttings and tunnel. */
+  function railY(x, z) {
+    let d = Infinity;
+    if (Math.abs(Math.abs(z) - RING) < 2.5 && Math.abs(x) < RAMP_END) d = Math.abs(x);
+    else if (Math.abs(Math.abs(x) - RING) < 2.5 && Math.abs(z) < RAMP_END) d = Math.abs(z);
+    if (d === Infinity) return 0;
+    return d <= COVER ? -DEPTH : -DEPTH * smooth((RAMP_END - d) / (RAMP_END - COVER));
+  }
+  const ringPts = [];
+  const addRing = pts => { for (const q2 of pts) { const l = ringPts[ringPts.length - 1]; if (!l || Math.hypot(l[0] - q2[0], l[1] - q2[1]) > 0.01) ringPts.push(q2); } };
+  addRing([[-RS, -RING], [RS, -RING]]); addRing(arcPts(RS, -RS, RC, -Math.PI / 2, 0, 12));
+  addRing([[RING, -RS], [RING, RS]]); addRing(arcPts(RS, RS, RC, 0, Math.PI / 2, 12));
+  addRing([[RS, RING], [-RS, RING]]); addRing(arcPts(-RS, RS, RC, Math.PI / 2, Math.PI, 12));
+  addRing([[-RING, RS], [-RING, -RS]]); addRing(arcPts(-RS, -RS, RC, Math.PI, 1.5 * Math.PI, 12)); addRing([[-RS, -RING]]);
+  const ringPath = makePath(ringPts), RL = ringPath.len;
+  const wrap = v => ((v % RL) + RL) % RL;
+  function ringS(x, z) {                                  // distance round the loop to the point nearest (x, z)
+    let best = Infinity, at = 0;
+    for (let k = 1; k < ringPts.length; k++) {
+      const [ax, az] = ringPts[k - 1], [bx, bz] = ringPts[k], dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)), d = Math.hypot(ax + dx * t - x, az + dz * t - z);
+      if (d < best) { best = d; at = ringPath.cum[k - 1] + t * Math.sqrt(l2); }
+    }
+    return at;
+  }
+  /* Branch lines: the straight part out to the edge of the map, then the curve that joins the loop. */
+  const northIn = [[-46, -FAR_RAIL], [-46, -RING - BR], ...arcPts(-30, -RING - BR, BR, Math.PI, Math.PI / 2, 8).slice(1)];
+  const eastIn = [[FAR_RAIL, -40], [RING + BR, -40], ...arcPts(RING + BR, -40 + BR, BR, -Math.PI / 2, -Math.PI, 8).slice(1)];
+  const southOut = [...arcPts(36, RING + BR, BR, -Math.PI / 2, -Math.PI, 8), [20, FAR_RAIL]];
+  /* Stations (yellow on the plan) and the cargo yard (pink): [x, z, and the direction toward town]. */
+  const stations = [[-RING, -58, 1, 0], [55, -RING, 0, 1], [-RING, 40, 1, 0], [46, RING, 0, -1]];
+  const cargoYard = [60, RING, 0, -1];
+
+  /* Things trees and pillars must keep clear of. */
+  const keepClear = [];
+  for (const line of [ringPts, northIn, eastIn, southOut]) for (let k = 1; k < line.length; k++) {
+    const [ax, az] = line[k - 1], [bx, bz] = line[k], n = Math.ceil(Math.hypot(bx - ax, bz - az) / 2);
+    for (let m = 0; m <= n; m++) keepClear.push([ax + (bx - ax) * m / n, az + (bz - az) * m / n, 0]);
+  }
+  for (const [x, z, nx, nz] of [...stations, cargoYard]) keepClear.push([x + nx * 5, z + nz * 5, 8]);
+  const nearTrack = (x, z, m) => keepClear.some(([kx, kz, r]) => Math.hypot(kx - x, kz - z) < m + r);
+
+  const TRACK = '#858b94', CURVE = '#a3aab3', CUT_FILL = '#7a6a55';
+  function trackPiece(ax, az, bx, bz, curve) {
+    const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz), mx = (ax + bx) / 2, mz = (az + bz) / 2;
+    if (L < 0.05 || inTunnel(mx, mz)) return;
+    const yaw = Math.atan2(dx, dz), ux = dx / L, uz = dz / L, rx = -uz, rz = ux, len = L - 0.14, plate = curve ? CURVE : TRACK;
+    const y0 = railY(ax, az), y1 = railY(bx, bz);
+    if (y0 === 0 && y1 === 0) {
+      box(mx, 0, mz, 3.4, 0.3, len, plate, -1, yaw);
+      for (let t = -len / 2 + 0.6; t < len / 2; t += 1.25) box(mx + ux * t, 0.3, mz + uz * t, 2.7, 0.12, 0.45, '#6b4a2b', -1, yaw);
+      for (const sd of [-1, 1]) box(mx + rx * 0.72 * sd, 0.42, mz + rz * 0.72 * sd, 0.18, 0.2, len, '#c9ced6', -1, yaw);
+      for (const e of [-1, 1]) for (const sd of [-1, 1]) stud(mx + ux * e * (len / 2 - 0.5) + rx * 1.4 * sd, 0.3, mz + uz * e * (len / 2 - 0.5) + rz * 1.4 * sd, plate);
+      return;
+    }
+    /* On a ramp: a short tilted piece, with earth filled in below it down to the floor of the cutting. */
+    const y = (y0 + y1) / 2, tilt = -Math.atan2(y1 - y0, L);
+    put('box', mx, y, mz, 3.4, 0.3, L + 0.05, plate, -1, yaw, tilt);
+    put('box', mx, y + 0.3, mz, 2.7, 0.12, 0.45, '#6b4a2b', -1, yaw, tilt);
+    for (const sd of [-1, 1]) put('box', mx + rx * 0.72 * sd, y + 0.42, mz + rz * 0.72 * sd, 0.18, 0.2, L + 0.05, '#c9ced6', -1, yaw, tilt);
+    const floor = -DEPTH - 0.4, top = Math.min(y0, y1);
+    if (top > floor) box(mx, floor, mz, CUT_W * 2 - 0.6, top - floor, L + 0.05, CUT_FILL, -1, yaw);
+  }
+  /* Straight track in long pieces, except near the cuttings, where it is cut short so it can slope. */
+  function straightRun(a, b) {
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L / 1.6));
+    const pts = Array.from({ length: n + 1 }, (_, k) => [a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+    let start = 0;
+    for (let k = 1; k <= n; k++) {
+      const flat = railY(pts[k - 1][0], pts[k - 1][1]) === 0 && railY(pts[k][0], pts[k][1]) === 0;
+      if (!flat) {
+        if (k - 1 > start) trackPiece(pts[start][0], pts[start][1], pts[k - 1][0], pts[k - 1][1], false);
+        trackPiece(pts[k - 1][0], pts[k - 1][1], pts[k][0], pts[k][1], false);
+        start = k;
+      } else if (k === n || Math.hypot(pts[k][0] - pts[start][0], pts[k][1] - pts[start][1]) >= 8) {
+        trackPiece(pts[start][0], pts[start][1], pts[k][0], pts[k][1], false); start = k;
+      }
+    }
+  }
+  const curveRun = pts => { for (let k = 1; k < pts.length; k++) trackPiece(pts[k - 1][0], pts[k - 1][1], pts[k][0], pts[k][1], true); };
+  straightRun([-RS, -RING], [RS, -RING]); curveRun(arcPts(RS, -RS, RC, -Math.PI / 2, 0, 4));
+  straightRun([RING, -RS], [RING, RS]); curveRun(arcPts(RS, RS, RC, 0, Math.PI / 2, 4));
+  straightRun([RS, RING], [-RS, RING]); curveRun(arcPts(-RS, RS, RC, Math.PI / 2, Math.PI, 4));
+  straightRun([-RING, RS], [-RING, -RS]); curveRun(arcPts(-RS, -RS, RC, Math.PI, 1.5 * Math.PI, 4));
+  straightRun(northIn[0], northIn[1]); curveRun(arcPts(-30, -RING - BR, BR, Math.PI, Math.PI / 2, 4));
+  straightRun(eastIn[0], eastIn[1]); curveRun(arcPts(RING + BR, -40 + BR, BR, -Math.PI / 2, -Math.PI, 4));
+  curveRun(arcPts(36, RING + BR, BR, -Math.PI / 2, -Math.PI, 4)); straightRun([20, RING + BR], [20, FAR_RAIL]);
+
+  /* The cuttings: a gravel floor and concrete retaining walls with a coping along the top. */
+  for (const [x0, x1, z0, z1] of cuts) {
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, alongX = x1 - x0 > z1 - z0, len = alongX ? x1 - x0 : z1 - z0;
+    box(cx, -DEPTH - 0.8, cz, x1 - x0, 0.4, z1 - z0, '#5a5048');
+    for (const sd of [-1, 1]) {
+      const wx = alongX ? cx : cx + sd * (CUT_W - 0.25), wz = alongX ? cz + sd * (CUT_W - 0.25) : cz;
+      box(wx, -DEPTH - 0.4, wz, alongX ? len : 0.5, DEPTH + 0.4, alongX ? 0.5 : len, '#9aa0a8');
+      box(wx, 0, wz, alongX ? len : 0.8, 0.25, alongX ? 0.8 : len, '#6c737d');
+    }
+  }
+  /* Tunnel mouths down in the cuttings, where the track goes under the covered part beneath the road. */
+  for (const [cx, cz, ax] of [[0, -RING, 'x'], [0, RING, 'x'], [-RING, 0, 'z'], [RING, 0, 'z']]) for (const sd of [-1, 1]) {
+    const nx = ax === 'x' ? sd : 0, nz = ax === 'z' ? sd : 0, px = cx + nx * COVER, pz = cz + nz * COVER, yaw = Math.atan2(nx, nz);
+    const acx = Math.abs(nz), acz = Math.abs(nx);
+    for (const e of [-1, 1]) box(px - nx * 0.4 + acx * e * 2.4, -DEPTH - 0.4, pz - nz * 0.4 + acz * e * 2.4, 1.2, DEPTH + 0.4, 0.8, '#7d8590', -1, yaw);
+    box(px - nx * 0.4, -1.5, pz - nz * 0.4, 6.0, 1.5, 0.8, '#7d8590', -1, yaw);
+    box(px - nx * 0.9, -DEPTH - 0.4, pz - nz * 0.9, 3.6, DEPTH - 1.1, 0.2, '#15171c', -1, yaw);
+    box(px - nx * 0.4, 0, pz - nz * 0.4, 6.6, 0.35, 1.2, '#6c737d', -1, yaw);
+  }
+
+  /* A sidewalk from a stop to the outer road, and a zebra crossing over the road into town. */
+  function walkway(x, z, nx, nz, from) {
+    const yawN = Math.atan2(nx, nz), toRoad = RING - (HALF);       // the outer road's edge, measured from the track
+    box(x + nx * (from + toRoad) / 2, 0, z + nz * (from + toRoad) / 2, 2.0, 0.32, toRoad - from, '#cfd3d8', -1, yawN);
+    for (let o = toRoad + 0.4; o <= toRoad + ROAD - 0.3; o += 0.85) box(x + nx * o, 0.2, z + nz * o, 1.6, 0.04, 0.45, C.line, -1, yawN);
+  }
+  /* Stations: a platform with a yellow edge line on the track side, a shelter, a sign, and people waiting. */
+  const WAITING = ['#0ed145', '#b23ac4', '#00a8f3', '#ed1c24', '#f28c28', '#ffffff', '#3f48cc'];
+  for (const [x, z, nx, nz] of stations) {
+    const ax = nz !== 0 ? 1 : 0, az = nx !== 0 ? 1 : 0, yaw = Math.atan2(ax, az), cx = x + nx * 3.3, cz = z + nz * 3.3;
+    box(cx, 0, cz, 3.0, 0.7, 12, '#cfd3d8', -1, yaw);
+    box(x + nx * 1.95, 0.7, z + nz * 1.95, 0.22, 0.03, 12, '#fff200', -1, yaw);
+    for (const e of [-2.2, 2.2]) cyl(cx + nx * 0.9 + ax * e, 0.7, cz + nz * 0.9 + az * e, 0.1, 2.3, '#3a3f48');
+    box(cx + nx * 0.5, 3.0, cz + nz * 0.5, 2.6, 0.25, 5.4, '#3f48cc', -1, yaw);
+    cyl(cx + nx * 1.0 + ax * 5, 0.7, cz + nz * 1.0 + az * 5, 0.08, 2.2, '#3a3f48');
+    box(cx + nx * 1.0 + ax * 5, 2.6, cz + nz * 1.0 + az * 5, 0.12, 0.7, 1.4, '#fff200', -1, yaw);
+    for (const t of [-3.4, -1.4, 0.4, 3.6]) {
+      if (Math.random() < 0.25) continue;
+      const px = cx + ax * t + nx * 0.2, pz = cz + az * t + nz * 0.2;
+      box(px, 0.7, pz, 0.42, 0.62, 0.3, '#2a318f'); box(px, 1.32, pz, 0.5, 0.6, 0.34, anyPick(WAITING)); box(px, 1.92, pz, 0.36, 0.36, 0.36, '#ffe6a3');
+    }
+    walkway(x, z, nx, nz, 4.8);
+  }
+  /* The cargo yard: a concrete pad with stacked containers, a lorry waiting to be loaded, and its own walkway. */
+  {
+    const [x, z, nx, nz] = cargoYard, ax = nz !== 0 ? 1 : 0, az = nx !== 0 ? 1 : 0, yaw = Math.atan2(ax, az), cx = x + nx * 4.9, cz = z + nz * 4.9;
+    box(cx, 0, cz, 6.4, 0.4, 14, '#b8bdc4', -1, yaw);
+    box(x + nx * 1.95, 0.4, z + nz * 1.95, 0.25, 0.03, 14, '#ff3df2', -1, yaw);
+    const BOXES = ['#ed1c24', '#3f48cc', '#0ed145', '#f28c28', '#00a8f3', '#ffffff'];
+    for (const t of [-4.6, 0, 4.6]) {
+      const bx = cx + ax * t + nx * 1.4, bz = cz + az * t + nz * 1.4;
+      box(bx, 0.4, bz, 2.3, 2.3, 4.3, anyPick(BOXES), -1, yaw);
+      if (Math.random() < 0.6) box(bx, 2.7, bz, 2.3, 2.3, 4.3, anyPick(BOXES), -1, yaw);
+    }
+    const lx = cx + ax * 9.5, lz = cz + az * 9.5;                       // a lorry parked at the end of the pad
+    box(lx + ax * 2.3, 0.5, lz + az * 2.3, 2.1, 1.8, 1.9, '#f28c28', -1, yaw);
+    box(lx - ax * 1.0, 0.5, lz - az * 1.0, 2.3, 2.4, 4.6, '#d8dde3', -1, yaw);
+    for (const e of [2.4, -0.6, -2.4]) for (const sd of [-1, 1]) put('wheel', lx + ax * e + nx * sd, 0, lz + az * e + nz * sd, 0.4, 1.0, 1.0, C.tyre, -1, yaw);
+    walkway(x - ax * 3, z - az * 3, nx, nz, 8.1);
+  }
+
+  /* ---------- tech city: skyways ----------
+     Three raised road loops weave across the town and out past its edge, each at its own height so
+     they pass over one another. Buildings under a skyway are kept low enough to clear it. */
+  const tech = weatherName === 'tech';
+  const skyways = [];
+  if (tech) for (let k = 0; k < 3; k++) {
+    const ctrl = [], n = 6, a0 = Math.random() * Math.PI * 2, base = 23 + k * 8;
+    for (let m = 0; m < n; m++) {
+      const a = a0 + (m / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+      const r = m % 2 ? 22 + Math.random() * 38 : 92 + Math.random() * 35;     // in and out across the town
+      ctrl.push(new THREE.Vector3(Math.cos(a) * r, base + Math.random() * 3, Math.sin(a) * r));
+    }
+    const curve = new THREE.CatmullRomCurve3(ctrl, true, 'centripetal');
+    const len = curve.getLength(), count = Math.ceil(len / 1.5);
+    skyways.push({ curve, len, count, pts: curve.getSpacedPoints(count) });
+  }
+  /* The lowest skyway deck above a spot, or Infinity. */
+  function skyAbove(x, z, r) {
+    let y = Infinity;
+    for (const sw of skyways) for (const q2 of sw.pts) if (Math.abs(q2.x - x) < r + 3 && Math.abs(q2.z - z) < r + 3) y = Math.min(y, q2.y);
+    return y;
+  }
+  /* How many floors fit under the skyway above, leaving room for roof details. */
+  const floorsUnder = (x, z, r) => { const y = skyAbove(x, z, r); return y === Infinity ? Infinity : Math.max(1, Math.floor((y - 7 - 0.55 - 2.2) / 2) + 1); };
 
   /* ---------- buildings ---------- */
   const TOP = 0.55;                                      // top of the pavement
@@ -338,6 +542,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     for (let t = -d / 2 + 0.3; t <= d / 2 - 0.3; t += STEP) for (const sd of [-1, 1]) bulb(x + sd * (w / 2 + 0.07), y - 0.18, z + t, colours[n++ % colours.length], g);
   }
   function building(x, z, w, d, floors, g) {
+    if (tech) floors = Math.min(floors, floorsUnder(x, z, Math.max(w, d) / 2));
     const wall = pick(WALLS);
     let y = TOP;
     box(x, y, z, w, 2.2, d, wall, g);
@@ -361,7 +566,9 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   }
   function tower(x, z, maxFloors, g) {
     const wall = pick(WALLS), w = whole(9, 12), d = whole(9, 12);
-    const lower = Math.max(3, Math.round(maxFloors * between(0.45, 0.75))), upper = Math.round(maxFloors * between(0.3, 0.6));
+    let lower = Math.max(3, Math.round(maxFloors * between(0.45, 0.75))), upper = Math.round(maxFloors * between(0.3, 0.6));
+    const fits = tech ? floorsUnder(x, z, 6.5) : Infinity;
+    if (lower + upper > fits) { const f = fits / (lower + upper); lower = Math.max(1, Math.floor(lower * f)); upper = Math.max(0, Math.floor(upper * f)); }
     let y = TOP;
     box(x, y, z, w, 2.4, d, wall, g);
     box(x, y, z + d / 2, 2.4, 1.8, 0.16, C.glassDark, g);
@@ -379,6 +586,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     tier(w - 3, d - 3, upper);
     lightsAround(x, y, z, w - 3, d - 3, g);
     roofTop(x, y, z, w - 3, d - 3, wall, g, true);
+    if (tech && fits === Infinity) box(x, y, z, 0.35, 6 + rand() * 8, 0.35, C.line, g);   // a glowing spire
   }
   function park(x, z, g) {
     box(x, TOP, z, BLOCK - 1, 0.25, BLOCK - 1, C.lawn, g);
@@ -401,12 +609,12 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     const x = -HALF + ROAD + i * PITCH + BLOCK / 2, z = -HALF + ROAD + j * PITCH + BLOCK / 2;
     blocks.push([x, z]);
     const mid = (N - 1) / 2, edge = Math.hypot(i - mid, j - mid) / Math.hypot(mid, mid);   // 0 in the centre, 1 at a corner
-    const maxFloors = 2 + Math.pow(1 - edge, 1.4) * 13;
+    const maxFloors = (2 + Math.pow(1 - edge, 1.4) * 13) * (tech ? 2.6 : 1);   // the tech city builds much taller
     box(x, 0.2, z, BLOCK, 0.35, BLOCK, C.pavement);
     const r = rand();
     if (r < 0.12) park(x, z, newGroup(x, z));
     else if (r < 0.2) carPark(x, z, newGroup(x, z));
-    else if (r < 0.42 && edge < 0.75) tower(x, z, maxFloors, newGroup(x, z));
+    else if (r < (tech ? 0.62 : 0.42) && edge < (tech ? 0.95 : 0.75)) tower(x, z, maxFloors, newGroup(x, z));
     else for (const a of [-4, 4]) for (const b of [-4, 4]) {
       if (rand() < 0.08) { const g = newGroup(x + a, z + b); tree(x + a, TOP, z + b, g); continue; }   // an empty lot with a tree
       const bx = x + a + between(-0.4, 0.4), bz = z + b + between(-0.4, 0.4);
@@ -432,12 +640,36 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
       }
     }
   }
-  /* Street lamps at the corners of every block, lit after dusk. */
-  if (look.streetLamps) for (const [x, z] of blocks) for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+  /* Street lamps at the corners of every block, all year. They are lit after dusk and in the tech city,
+     and show a plain unlit glass head in daytime. */
+  const lampsLit = !!look.streetLamps || weatherName === 'tech';
+  for (const [x, z] of blocks) for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
     const lx = x + a * 7.35, lz = z + b * 7.35;
     cyl(lx, TOP, lz, 0.12, 3.3, '#3a3f48');
     box(lx - a * 0.3, TOP + 3.2, lz - b * 0.3, 0.7, 0.12, 0.7, '#3a3f48');
-    put('lamp', lx - a * 0.3, TOP + 3.02, lz - b * 0.3, 0.5, 0.2, 0.5, '#ffd98a');
+    if (lampsLit) put('lamp', lx - a * 0.3, TOP + 3.02, lz - b * 0.3, 0.5, 0.2, 0.5, weatherName === 'tech' ? '#29f0ff' : '#ffd98a');
+    else box(lx - a * 0.3, TOP + 3.02, lz - b * 0.3, 0.5, 0.2, 0.5, '#d9dee4');
+  }
+
+  /* Skyway decks: a dark road with pale glowing edges, laid in short flat pieces along each loop.
+     Pillars stand on the centre line of a street (between the two lanes, away from junctions and
+     crossings) or out on the grass, so nothing on the ground drives or flies into them. */
+  for (const sw of skyways) {
+    let lastPillar = -99;
+    for (let m = 0; m < sw.count; m++) {
+      const a = sw.pts[m], b = sw.pts[m + 1], dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz) || 1;
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, mz = (a.z + b.z) / 2, yaw = Math.atan2(dx, dz), rx = -dz / L, rz = dx / L;
+      box(mx, my - 0.5, mz, 3.4, 0.5, L + 0.3, '#141a2b', -1, yaw);
+      for (const sd of [-1, 1]) put('lamp', mx + rx * 1.65 * sd, my - 0.06, mz + rz * 1.65 * sd, 0.16, 0.16, L + 0.3, '#ffeec8', -1, yaw);
+      if (m - lastPillar < 4) continue;
+      const inside = Math.abs(a.x) < HALF && Math.abs(a.z) < HALF;
+      if (inside) {
+        for (const R of roadLines) {
+          if (Math.abs(a.x - R) < 0.75 && !roadLines.some(R2 => Math.abs(a.z - R2) < 4.6)) { cyl(R, 0, a.z, 0.25, a.y - 0.5, '#2a3350'); lastPillar = m; break; }
+          if (Math.abs(a.z - R) < 0.75 && !roadLines.some(R2 => Math.abs(a.x - R2) < 4.6)) { cyl(a.x, 0, R, 0.25, a.y - 0.5, '#2a3350'); lastPillar = m; break; }
+        }
+      } else if (m - lastPillar > 14 && Math.abs(a.x) > 6 && Math.abs(a.z) > 6 && !nearTrack(a.x, a.z, 3)) { cyl(a.x, 0, a.z, 0.55, a.y - 0.5, '#2a3350'); lastPillar = m; }
+    }
   }
 
   /* ---------- the open ground around the city ----------
@@ -446,7 +678,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     const far = rand() < 0.6, a = between(0, 6.28), dist = far ? between(HALF + 30, 520) : 0;
     let x = far ? Math.cos(a) * dist : between(-HALF - 17, HALF + 17), z = far ? Math.sin(a) * dist : between(-HALF - 17, HALF + 17);
     if (!far && Math.abs(x) < HALF + 4 && Math.abs(z) < HALF + 4) { if (rand() < 0.5) x = Math.sign(x || 1) * (HALF + between(5, 17)); else z = Math.sign(z || 1) * (HALF + between(5, 17)); }
-    if (Math.abs(x) < 6 || Math.abs(z) < 6) continue;      // keep the roads clear
+    if (Math.abs(x) < 6 || Math.abs(z) < 6 || nearTrack(x, z, 3.5)) continue;      // keep the roads and the railway clear
     tree(x, 0, z, -1, between(1, far ? 2.2 : 1.5));
   }
 
@@ -536,8 +768,9 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
       body: [[2.3, 2.2, 9], [0, 1.55, 0]], glass: [[2.34, 0.75, 8.4], [0, 1.9, 0.1]],
       wheels: [[0.4, 1.0, 1.0], [[-1.05, 0.5, 3.2], [1.05, 0.5, 3.2], [-1.05, 0.5, -3.2], [1.05, 0.5, -3.2]]] } }
   };
+  const STOP_BACK = 1.4;                                  // a vehicle's front stops this far before the junction edge, behind the zebra crossing
   const BUS_COLOURS = ['#fff200', '#ed1c24', '#00a8f3', '#0ed145'], CARGO_COLOURS = ['#ffffff', '#d8dde3', '#f28c28', '#3f48cc', '#ed1c24'];
-  const fleet = [...Array(24).fill('car'), ...Array(5).fill('truck'), ...Array(4).fill('bus')];
+  const fleet = [...Array(24).fill('car'), ...Array(9).fill('truck'), ...Array(4).fill('bus')];
   const V = fleet.length, cars = [];
   const vBody = new THREE.InstancedMesh(kinds.box.geo, solid, V), vGlass = new THREE.InstancedMesh(kinds.box.geo, glass, V);
   const vCargo = new THREE.InstancedMesh(kinds.box.geo, solid, V), vWheel = new THREE.InstancedMesh(wheelGeo, solid, V * 6);
@@ -550,7 +783,9 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     let i, j, d;
     do { i = Math.floor(rand() * (N + 1)); j = Math.floor(rand() * (N + 1)); d = DIRS[Math.floor(rand() * 4)]; } while (!canGo(i, j, d));
     const path = segPath(i, j, d);
-    cars.push({ type, T, i, j, d, path, mode: 'seg', s: rand() * path.len, speed: between(T.speed[0], T.speed[1]) });
+    const v = { type, T, i, j, d, path, mode: 'seg', s: rand() * path.len, speed: between(T.speed[0], T.speed[1]), wait: 0 };
+    v.plan = pickTurn(v); v.committed = v.s > path.len - STOP_BACK - T.len / 2 - 0.5;
+    cars.push(v);
     vBody.setColorAt(n, paint(type === 'bus' ? pick(BUS_COLOURS) : pick(CARS)));
     vGlass.setColorAt(n, paint(C.glassDark));
     vCargo.setColorAt(n, paint(pick(CARGO_COLOURS)));
@@ -564,21 +799,118 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     if (v.mode === 'seg') return [v.i + ',' + v.j + ',' + v.d, v.s];
     return [v.pi + ',' + v.pj + ',' + v.pd, v.segLen + v.s];   // still counts as the lane it came from while turning
   }
-  function nextLeg(v) {
+  /* The way a vehicle will go at the junction ahead: straight on about half the time, otherwise left or
+     right. Chosen when it starts down a street, so it can signal its intent and give way properly. */
+  function pickTurn(v) {
     const ni = v.i + v.d[0], nj = v.j + v.d[1];
-    if (v.mode === 'turn') { v.i = v.ti; v.j = v.tj; v.d = v.nd; v.path = segPath(v.i, v.j, v.d); v.mode = 'seg'; v.s = 0; return; }
-    if (!inGrid(ni) || !inGrid(nj)) {                     // the far end of a main road: turn round out of sight
-      v.i = ni; v.j = nj; v.d = [-v.d[0], -v.d[1]]; v.path = segPath(v.i, v.j, v.d); v.s = 0; return;
-    }
+    if (!inGrid(ni) || !inGrid(nj)) return null;
     const straight = v.d, left = [v.d[1], -v.d[0]], right = rightOf(v.d);
     const options = [[straight, 0.5], [left, 0.25], [right, 0.25]].filter(([d]) => canGo(ni, nj, d));
-    let nd = [-v.d[0], -v.d[1]];
-    if (options.length) { let x = rand() * options.reduce((t, o) => t + o[1], 0); for (const [d, w] of options) { if ((x -= w) <= 0) { nd = d; break; } } }
+    if (!options.length) return [-v.d[0], -v.d[1]];
+    let x = Math.random() * options.reduce((t, o) => t + o[1], 0);
+    for (const [d, w] of options) if ((x -= w) <= 0) return d;
+    return options[options.length - 1][0];
+  }
+  function startStreet(v) { v.path = segPath(v.i, v.j, v.d); v.mode = 'seg'; v.s = 0; v.committed = false; v.wait = 0; v.plan = pickTurn(v); }
+  function nextLeg(v) {
+    const ni = v.i + v.d[0], nj = v.j + v.d[1];
+    if (v.mode === 'turn') { v.i = v.ti; v.j = v.tj; v.d = v.nd; startStreet(v); return; }
+    if (!inGrid(ni) || !inGrid(nj)) {                     // the far end of a main road: turn round out of sight
+      v.i = ni; v.j = nj; v.d = [-v.d[0], -v.d[1]]; startStreet(v); return;
+    }
+    const nd = v.plan || pickTurn(v);
     Object.assign(v, { pi: v.i, pj: v.j, pd: v.d, segLen: v.path.len, ti: ni, tj: nj, nd, mode: 'turn', s: 0, path: turnPath(ni, nj, v.d, nd) });
   }
   const part = new THREE.Matrix4(), base = new THREE.Matrix4();
   function setPart(mesh, index, size, at) { mesh.setMatrixAt(index, part.makeScale(size[0], size[1], size[2]).setPosition(at[0], at[1], at[2]).premultiply(base)); }
+
+  /* ---------- traffic lights ----------
+     Every junction with three or more roads has lights: one head on the near right-hand corner of each
+     approach, facing the oncoming traffic. East-west traffic gets green, then amber, then a moment of
+     all-red, then north-south does the same. Each junction starts at a different point in the cycle. */
+  const CYCLE = 20, axisOf = d => (d[0] !== 0 ? 0 : 1);
+  const same = (a, b) => !!a && !!b && a[0] === b[0] && a[1] === b[1];
+  const isLeftTurn = (d, nd) => !!nd && nd[0] === d[1] && nd[1] === -d[0];
+  const leftOf = d => [d[1], -d[0]];
+  const signals = new Map(), heads = [];
+  let trafficTime = 0;
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+    const arms = DIRS.filter(d => canGo(i, j, d));
+    if (arms.length < 3) continue;
+    const key = i + ',' + j;
+    signals.set(key, Math.random() * CYCLE);
+    for (const a of arms) {                               // traffic arriving down arm a is heading d = -a
+      const d = [-a[0], -a[1]], r = rightOf(d), o = J + 0.75;
+      heads.push({ key, axis: axisOf(d), x: coord(i) - d[0] * o + r[0] * o, z: coord(j) - d[1] * o + r[1] * o, d });
+    }
+  }
+  function signalAt(key, axis) {
+    if (!signals.has(key)) return 'none';
+    const u = (trafficTime + signals.get(key)) % CYCLE;
+    if (axis === 0) return u < 7 ? 'green' : u < 9 ? 'amber' : 'red';
+    return u < 10 ? 'red' : u < 17 ? 'green' : u < 19 ? 'amber' : 'red';
+  }
+  const H = heads.length, sigMat = new THREE.MeshBasicMaterial();
+  const sigPole = new THREE.InstancedMesh(kinds.cyl.geo, solid, H), sigHead = new THREE.InstancedMesh(kinds.box.geo, solid, H);
+  const sigLamp = new THREE.InstancedMesh(kinds.box.geo, sigMat, H * 3);
+  for (const m of [sigPole, sigHead]) { m.castShadow = true; scene.add(m); }
+  scene.add(sigLamp);
+  heads.forEach((h, n) => {
+    q.setFromAxisAngle(UP, Math.atan2(-h.d[0], -h.d[1]));   // the face of the head points at the oncoming traffic
+    base.compose(p.set(h.x, TOP, h.z), q, sc.set(1, 1, 1));
+    setPart(sigPole, n, [0.24, 3.3, 0.24], [0, 1.65, 0]); sigPole.setColorAt(n, paint('#3a3f48'));
+    setPart(sigHead, n, [0.55, 1.4, 0.45], [0, 3.75, 0]); sigHead.setColorAt(n, paint('#1f2328'));
+    for (let k = 0; k < 3; k++) setPart(sigLamp, n * 3 + k, [0.32, 0.32, 0.06], [0, 4.2 - k * 0.43, 0.25]);
+  });
+  sigPole.instanceColor.needsUpdate = sigHead.instanceColor.needsUpdate = true;
+  const LIT = ['#ff2a2a', '#ffb020', '#22ff66'], DARK = ['#3a1414', '#3a2a0c', '#0f3a1c'];
+  function paintSignals() {
+    heads.forEach((h, n) => {
+      const st = signalAt(h.key, h.axis), on = st === 'red' ? 0 : st === 'amber' ? 1 : 2;
+      for (let k = 0; k < 3; k++) sigLamp.setColorAt(n * 3 + k, tint.set(k === on ? LIT[k] : DARK[k]));
+    });
+    sigLamp.instanceColor.needsUpdate = true;
+  }
+
+  /* Someone on the zebra crossing on arm a of the junction at (cx, cz)? */
+  const CROSS_LINE = ROAD / 2 + 0.45;
+  function personOnCrossing(cx, cz, a) {
+    for (const pr of people) {
+      if (!pr.cross) continue;
+      const c = pr.cross, px = c.x0 + (c.x1 - c.x0) * c.t - cx, pz = c.z0 + (c.z1 - c.z0) * c.t - cz;
+      const alongArm = px * a[0] + pz * a[1], acrossArm = px * a[1] - pz * a[0];
+      if (Math.abs(alongArm - CROSS_LINE) < 1.2 && Math.abs(acrossArm) < 3.6) return true;
+    }
+    return false;
+  }
+  /* May this vehicle drive past its stop line into the junction ahead? */
+  function mayEnter(v, stopS) {
+    const xi = v.i + v.d[0], xj = v.j + v.d[1], key = xi + ',' + xj, ax = axisOf(v.d), plan = v.plan;
+    const light = signalAt(key, ax);
+    if (light === 'red') return false;
+    if (light === 'amber' && v.s < stopS - 1.0) return false;           // amber: stop unless it is too late to
+    const left = isLeftTurn(v.d, plan), opp = [-v.d[0], -v.d[1]], patient = v.wait > 5;
+    const cx = coord(xi), cz = coord(xj);
+    if (personOnCrossing(cx, cz, opp) || (plan && personOnCrossing(cx, cz, plan))) return false;   // people on the crossings
+    for (const o of cars) {
+      if (o === v) continue;
+      if (o.mode === 'turn' && o.ti === xi && o.tj === xj) {
+        if (axisOf(o.pd) !== ax) return false;                            // cross traffic still in the junction
+        if (same(o.pd, opp) && (left || isLeftTurn(o.pd, o.nd)) && !patient) return false;   // oncoming traffic and a left turn would cross
+        if (plan && same(o.nd, plan)) return false;                       // one at a time into the same exit
+      }
+      if (o.mode === 'seg' && o.i + o.d[0] === xi && o.j + o.d[1] === xj) {
+        const front = o.s + o.T.len / 2;
+        if (left && !patient && same(o.d, opp) && front > o.path.len - 9 && !isLeftTurn(o.d, o.plan)) return false;   // turning left: give way to oncoming
+        if (light === 'none' && same(o.d, leftOf(v.d)) && front > o.path.len - STOP_BACK - 0.8) return false;        // no lights: give way to the right
+      }
+      if (plan && o.mode === 'seg' && o.i === xi && o.j === xj && same(o.d, plan) && o.s - o.T.len / 2 < v.T.len + 1.5) return false;   // no room on the far side
+    }
+    return true;
+  }
   function placeCars(dt) {
+    trafficTime += dt;
+    paintSignals();
     const spots = cars.map(laneSpot);
     cars.forEach((v, n) => {
       const [lane, pos] = spots[n];
@@ -586,6 +918,13 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
       cars.forEach((o, m) => { if (m !== n && spots[m][0] === lane && spots[m][1] > pos) gap = Math.min(gap, spots[m][1] - pos - (o.T.len + v.T.len) / 2); });
       const pace = v.speed * (v.mode === 'turn' ? 0.55 : 1);
       let move = gap < 1.2 ? 0 : Math.min(pace * dt, gap - 1.2);
+      if (v.mode === 'seg' && !v.committed && inGrid(v.i + v.d[0]) && inGrid(v.j + v.d[1])) {
+        const stopS = v.path.len - STOP_BACK - v.T.len / 2;
+        if (v.s + move >= stopS) {
+          if (mayEnter(v, stopS)) v.committed = true;
+          else { move = Math.max(0, stopS - v.s); if (move < 0.001) v.wait += dt; }
+        }
+      }
       while (move > 0) { const left = v.path.len - v.s; if (move < left) { v.s += move; move = 0; } else { move -= left; v.s = v.path.len; nextLeg(v); } }
       const [x, z, yaw] = along(v.path, v.s), T = v.T, P = T.parts;
       q.setFromAxisAngle(UP, yaw);
@@ -603,7 +942,6 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     for (const m of vehicleMeshes) m.instanceMatrix.needsUpdate = true;
   }
   const nothing = new THREE.Matrix4().makeScale(0, 0, 0);
-  placeCars(0);
 
   /* ---------- people on the pavements ----------
      Very plain little figures, no faces: a head, a top and legs. Three shapes: an adult in a top and
@@ -653,8 +991,12 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     const ended = pr.dir > 0 ? next >= (k + 1) * W2 : next < k * W2;
     if (ended && Math.random() < 0.35) {
       const h = HEADS[k].map(v => v * pr.dir), ni = pr.bi + h[0], nj = pr.bj + h[1];
-      if (ni >= 0 && ni < N && nj >= 0 && nj < N) {
-        const cn = CORNERS[pr.dir > 0 ? (k + 1) % 4 : k], x0 = pr.bx + cn[0], z0 = pr.bz + cn[1];
+      const cn = CORNERS[pr.dir > 0 ? (k + 1) % 4 : k];
+      /* The junction this crossing belongs to, and the traffic on the road being crossed. */
+      const ji = pr.bi + (cn[0] > 0 ? 1 : 0), jj = pr.bj + (cn[1] > 0 ? 1 : 0), carsAxis = h[0] !== 0 ? 1 : 0;
+      const walkSign = signalAt(ji + ',' + jj, carsAxis);
+      if (ni >= 0 && ni < N && nj >= 0 && nj < N && (walkSign === 'red' || walkSign === 'none')) {
+        const x0 = pr.bx + cn[0], z0 = pr.bz + cn[1];
         pr.cross = { x0, z0, x1: x0 + h[0] * GAP, z1: z0 + h[1] * GAP, t: 0, h, at: pr.dir > 0 ? k * W2 + 0.001 : (k + 1) * W2 - 0.001 };
         return [x0, z0, Math.atan2(h[0], h[1]), TOP];
       }
@@ -686,6 +1028,206 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     for (const m of peopleMeshes) m.instanceMatrix.needsUpdate = true;
   }
   placePeople(0, 0);
+  placeCars(0);
+
+  /* ---------- tech city: flying cars ----------
+     Some hover along the streets well above the traffic and below the lowest skyway, turning at
+     junctions; the streets are always clear of buildings. Others run both ways along each skyway.
+     They glow underneath, with headlights in front and thrusters behind. */
+  const fliers = [];
+  if (tech) {
+    for (let k = 0; k < 12; k++) {
+      let i, j, d;
+      do { i = Math.floor(Math.random() * (N + 1)); j = Math.floor(Math.random() * (N + 1)); d = DIRS[Math.floor(Math.random() * 4)]; } while (!canGo(i, j, d));
+      const path = segPath(i, j, d);
+      fliers.push({ sky: null, i, j, d, path, mode: 'seg', s: Math.random() * path.len, alt: 11 + Math.random() * 6, speed: 12 + Math.random() * 6, bob: Math.random() * 6 });
+    }
+    for (const sw of skyways) for (let m = 0; m < 4; m++) fliers.push({ sky: sw, dir: m % 2 ? 1 : -1, s: Math.random() * sw.len, speed: 13 + Math.random() * 5, bob: 0 });
+  }
+  function flyNext(f) {
+    const ni = f.i + f.d[0], nj = f.j + f.d[1];
+    if (f.mode === 'turn') { f.i = ni; f.j = nj; f.d = f.nd; f.mode = 'seg'; f.path = segPath(f.i, f.j, f.d); return; }
+    if (!inGrid(ni) || !inGrid(nj)) { f.i = ni; f.j = nj; f.d = [-f.d[0], -f.d[1]]; f.path = segPath(f.i, f.j, f.d); return; }
+    const opts = [f.d, [f.d[1], -f.d[0]], rightOf(f.d)].filter(d => canGo(ni, nj, d));
+    f.nd = opts.length ? opts[Math.floor(Math.random() * opts.length)] : [-f.d[0], -f.d[1]];
+    f.path = turnPath(ni, nj, f.d, f.nd); f.mode = 'turn';      // f.i, f.j, f.d stay as they were until the turn is done
+  }
+  const F = fliers.length;
+  const flyGlowMat = new THREE.MeshBasicMaterial();
+  const fBody = new THREE.InstancedMesh(kinds.box.geo, solid, Math.max(F, 1)), fGlass = new THREE.InstancedMesh(kinds.box.geo, glass, Math.max(F, 1));
+  const fGlow = new THREE.InstancedMesh(kinds.box.geo, flyGlowMat, Math.max(F, 1) * 5);
+  const flyMeshes = [fBody, fGlass, fGlow];
+  for (const m of flyMeshes) { m.frustumCulled = false; m.visible = F > 0; scene.add(m); }
+  fBody.castShadow = true;
+  fliers.forEach((f, n) => {
+    fBody.setColorAt(n, paint(pick(CARS))); fGlass.setColorAt(n, tint.set('#1b2440'));
+    const under = anyPick(['#29f0ff', '#ff3df2', '#7a5cff']);
+    [under, '#ff3df2', '#ff3df2', '#fff4c8', '#fff4c8'].forEach((c, k) => fGlow.setColorAt(n * 5 + k, tint.set(c)));
+  });
+  if (F) for (const m of flyMeshes) m.instanceColor.needsUpdate = true;
+  const flyPoint = new THREE.Vector3(), flyTangent = new THREE.Vector3();
+  function placeFliers(dt, t) {
+    fliers.forEach((f, n) => {
+      let x, y, z, yaw;
+      if (f.sky) {
+        f.s = (f.s + f.dir * f.speed * dt + f.sky.len) % f.sky.len;
+        const u = f.s / f.sky.len;
+        f.sky.curve.getPointAt(u, flyPoint); f.sky.curve.getTangentAt(u, flyTangent);
+        const tx = flyTangent.x * f.dir, tz = flyTangent.z * f.dir, L = Math.hypot(tx, tz) || 1;
+        x = flyPoint.x + (-tz / L) * 0.85; z = flyPoint.z + (tx / L) * 0.85; y = flyPoint.y + 0.05; yaw = Math.atan2(tx, tz);   // keep right on the deck
+      } else {
+        let move = f.speed * (f.mode === 'turn' ? 0.6 : 1) * dt;
+        while (move > 0) { const left = f.path.len - f.s; if (move < left) { f.s += move; move = 0; } else { move -= left; f.s = 0; flyNext(f); } }
+        [x, z, yaw] = along(f.path, f.s);
+        y = f.alt + Math.sin(t * 1.8 + f.bob) * 0.35;
+      }
+      q.setFromAxisAngle(UP, yaw);
+      base.compose(p.set(x, y, z), q, sc.set(1, 1, 1));
+      setPart(fBody, n, [1.6, 0.55, 3.4], [0, 0.55, 0]);
+      setPart(fGlass, n, [1.2, 0.45, 1.4], [0, 1.0, -0.2]);
+      setPart(fGlow, n * 5, [1.3, 0.08, 2.8], [0, 0.24, 0]);
+      setPart(fGlow, n * 5 + 1, [0.5, 0.3, 0.12], [-0.45, 0.55, -1.74]); setPart(fGlow, n * 5 + 2, [0.5, 0.3, 0.12], [0.45, 0.55, -1.74]);
+      setPart(fGlow, n * 5 + 3, [0.36, 0.2, 0.08], [-0.5, 0.6, 1.74]); setPart(fGlow, n * 5 + 4, [0.36, 0.2, 0.08], [0.5, 0.6, 1.74]);
+    });
+    if (F) for (const m of flyMeshes) m.instanceMatrix.needsUpdate = true;
+  }
+  placeFliers(0, 0);
+
+  /* ---------- trains ----------
+     Two passenger trains go round the loop, stopping at each station. One cargo train at a time comes
+     in on the north or east branch, waits for a gap in the loop traffic before joining, stops at the
+     cargo yard, then leaves on the south branch; a little later the next one arrives. Every train keeps
+     its distance from the one in front. Cars disappear while they are in a tunnel. */
+  const CAR_LEN = 6, WAGON_LEN = 6.4, COUPLING = 0.6, RAIL_Y = 0.62;
+  const CONTAINERS = ['#ed1c24', '#3f48cc', '#0ed145', '#f28c28', '#00a8f3', '#ffffff'];
+  const paxStops = stations.map(([x, z]) => ringS(x, z)).sort((a, b) => a - b);
+  const trains = [];
+  function newTrain(kind, loco, coach) {
+    const cars = kind === 'pax'
+      ? [{ part: 'loco', len: CAR_LEN, colour: loco }, ...[0, 1, 2].map(() => ({ part: 'coach', len: CAR_LEN, colour: coach }))]
+      : [{ part: 'loco', len: WAGON_LEN, colour: loco }, ...[0, 1, 2, 3].map(() => ({ part: 'wagon', len: WAGON_LEN, colour: '#4a4f58', cont: anyPick(CONTAINERS) }))];
+    let off = 0;
+    for (const c of cars) { c.off = off; off += c.len + COUPLING; }
+    return { kind, cars, len: off - COUPLING, front: 0, speed: kind === 'pax' ? 9 : 7, dwell: 0 };
+  }
+  const paxA = newTrain('pax', '#ed1c24', '#f4f1e8'), paxB = newTrain('pax', '#3f48cc', '#fff200');
+  paxA.front = 20; paxB.front = RL / 2 + 20;
+  for (const tr of [paxA, paxB]) { tr.stop = paxStops.findIndex(st => st + tr.len / 2 > tr.front); if (tr.stop < 0) tr.stop = 0; trains.push(tr); }
+  /* A cargo route: in on a branch, round part of the loop, out on the south branch. */
+  function cargoRoute(spurIn) {
+    const inPath = makePath(spurIn), [ex, ez] = spurIn[spurIn.length - 1];
+    const sIn = ringS(ex, ez), sOut0 = ringS(southOut[0][0], southOut[0][1]), sOut = sOut0 > sIn ? sOut0 : sOut0 + RL;
+    const pts = [...spurIn];
+    for (let sv = sIn + 1.5; sv < sOut; sv += 1.5) { const [x, z] = along(ringPath, wrap(sv)); pts.push([x, z]); }
+    pts.push(...southOut);
+    const path = makePath(pts), sYard = ringS(cargoYard[0], cargoYard[1]);
+    return { path, sIn, dIn: inPath.len, dOut: inPath.len + (sOut - sIn), dYard: inPath.len + (sYard >= sIn ? sYard - sIn : sYard + RL - sIn) };
+  }
+  const ROUTES = [cargoRoute(northIn), cargoRoute(eastIn)];
+  const cargo = newTrain('cargo', '#f28c28');
+  cargo.route = ROUTES[Math.floor(Math.random() * 2)]; cargo.front = cargo.route.dIn - 50; cargo.active = true;
+  trains.push(cargo);
+
+  /* Where a train is on the loop, as [front, rear] distances round it, or null if it is off the loop. */
+  function onLoop(tr) {
+    if (tr.kind === 'pax') return [tr.front, tr.front - tr.len];
+    if (!tr.active) return null;
+    const r = tr.route;
+    if (tr.front < r.dIn || tr.front - tr.len > r.dOut) return null;
+    return [r.sIn + Math.min(tr.front, r.dOut) - r.dIn, r.sIn + Math.max(tr.front - tr.len, r.dIn) - r.dIn];
+  }
+  function roomAhead(tr, front) {
+    let gap = Infinity;
+    for (const o of trains) { if (o === tr) continue; const at = onLoop(o); if (at) gap = Math.min(gap, wrap(at[1] - front)); }
+    return gap;
+  }
+  function stepTrain(tr, dt) {
+    if (tr.kind === 'cargo' && !tr.active) {
+      tr.wait -= dt;
+      if (tr.wait <= 0) { tr.route = ROUTES[Math.floor(Math.random() * 2)]; tr.front = 0; tr.active = true; tr.yardDone = false; for (const c of tr.cars) if (c.part === 'wagon') c.cont = anyPick(CONTAINERS); paintTrains(); }
+      return;
+    }
+    let move = tr.speed * dt;
+    if (tr.dwell > 0) { tr.dwell -= dt; move = 0; }
+    if (tr.kind === 'pax') {
+      const stopAt = paxStops[tr.stop] + tr.len / 2, toStop = wrap(stopAt - tr.front);
+      if (toStop <= move) { move = toStop; tr.dwell = 3.5; tr.stop = (tr.stop + 1) % paxStops.length; }
+      move = Math.min(move, Math.max(0, roomAhead(tr, wrap(tr.front)) - 5));
+      tr.front = wrap(tr.front + move);
+      return;
+    }
+    const r = tr.route;
+    if (tr.front < r.dIn - 0.5 && tr.front + move >= r.dIn - 0.5) {              // wait for a gap before joining the loop
+      const blocked = trains.some(o => o !== tr && o.kind === 'pax' && (wrap(r.sIn - o.front) < 40 || wrap(o.front - r.sIn) < o.len + 4));
+      if (blocked) move = Math.max(0, r.dIn - 0.5 - tr.front);
+    }
+    if (!tr.yardDone && tr.front < r.dYard + tr.len / 2 && tr.front + move >= r.dYard + tr.len / 2) { move = r.dYard + tr.len / 2 - tr.front; tr.dwell = 6; tr.yardDone = true; }
+    if (tr.front >= r.dIn - 0.5 && tr.front <= r.dOut) move = Math.min(move, Math.max(0, roomAhead(tr, wrap(r.sIn + tr.front - r.dIn)) - 5));
+    tr.front += move;
+    if (tr.front - tr.len > r.path.len) { tr.active = false; tr.wait = 8 + Math.random() * 12; }
+  }
+
+  const TC = trains.reduce((n, tr) => n + tr.cars.length, 0), trLightMat = new THREE.MeshBasicMaterial();
+  const trBody = new THREE.InstancedMesh(kinds.box.geo, solid, TC), trGlass = new THREE.InstancedMesh(kinds.box.geo, glass, TC);
+  const trRoof = new THREE.InstancedMesh(kinds.box.geo, solid, TC), trBogie = new THREE.InstancedMesh(kinds.box.geo, solid, TC * 2);
+  const trCont = new THREE.InstancedMesh(kinds.box.geo, solid, TC), trLight = new THREE.InstancedMesh(kinds.box.geo, trLightMat, TC * 2);
+  const trainMeshes = [trBody, trGlass, trRoof, trBogie, trCont, trLight];
+  for (const m of trainMeshes) { m.castShadow = m !== trLight; m.frustumCulled = false; scene.add(m); }
+  trLight.visible = !!look.headlights;
+  function paintTrains() {
+    let n = 0;
+    for (const tr of trains) tr.cars.forEach((c, k) => {
+      trBody.setColorAt(n, paint(c.colour)); trGlass.setColorAt(n, paint(C.glassDark)); trRoof.setColorAt(n, paint('#9aa0a8'));
+      trBogie.setColorAt(n * 2, paint('#26262b')); trBogie.setColorAt(n * 2 + 1, paint('#26262b'));
+      trCont.setColorAt(n, paint(c.cont || '#000000'));
+      trLight.setColorAt(n * 2, tint.set(k === 0 ? '#fff4c8' : '#ff2a2a')); trLight.setColorAt(n * 2 + 1, tint.set(k === 0 ? '#fff4c8' : '#ff2a2a'));
+      n++;
+    });
+    for (const m of trainMeshes) m.instanceColor.needsUpdate = true;
+  }
+  paintTrains();
+  /* A car sits between two points on its track (its bogies), so on a curve it lies along the chord. */
+  function trackPoint(tr, dist) {
+    if (tr.kind === 'pax') return along(ringPath, wrap(dist));
+    if (dist < 0 || dist > tr.route.path.len) return null;
+    return along(tr.route.path, dist);
+  }
+  function placeTrains(dt) {
+    for (const tr of trains) stepTrain(tr, dt);
+    let n = 0;
+    for (const tr of trains) tr.cars.forEach((c, k) => {
+      const mid = tr.front - c.off - c.len / 2, a = trackPoint(tr, mid + c.len / 2 - 1.2), b = trackPoint(tr, mid - c.len / 2 + 1.2);
+      const hidden = !a || !b || (tr.kind === 'cargo' && !tr.active);
+      const x = hidden ? 0 : (a[0] + b[0]) / 2, z = hidden ? 0 : (a[1] + b[1]) / 2;
+      if (hidden || inTunnel(x, z) || Math.abs(x) > 380 || Math.abs(z) > 380) {
+        for (const m of [trBody, trGlass, trRoof, trCont]) m.setMatrixAt(n, nothing);
+        for (const e of [0, 1]) { trBogie.setMatrixAt(n * 2 + e, nothing); trLight.setMatrixAt(n * 2 + e, nothing); }
+        n++; return;
+      }
+      const ya = railY(a[0], a[1]), yb = railY(b[0], b[1]), chord = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
+      q.setFromEuler(eul.set(-Math.atan2(ya - yb, chord), Math.atan2(a[0] - b[0], a[1] - b[1]), 0, 'YXZ'));
+      base.compose(p.set(x, RAIL_Y + (ya + yb) / 2, z), q, sc.set(1, 1, 1));
+      const L = c.len;
+      for (const e of [0, 1]) setPart(trBogie, n * 2 + e, [1.9, 0.5, 1.4], [0, 0.25, (e ? -1 : 1) * (L / 2 - 1.2)]);
+      if (c.part === 'wagon') {
+        setPart(trBody, n, [2.2, 0.45, L], [0, 0.68, 0]);
+        setPart(trCont, n, [2.2, 2.2, L - 0.8], [0, 2.0, 0]);
+        trGlass.setMatrixAt(n, nothing); trRoof.setMatrixAt(n, nothing);
+      } else {
+        const loco = c.part === 'loco', hgt = loco ? 2.2 : 2.1;
+        setPart(trBody, n, [2.3, hgt, L], [0, 0.45 + hgt / 2, 0]);
+        setPart(trGlass, n, loco ? [2.34, 0.7, 1.6] : [2.34, 0.7, L - 1], [0, loco ? 1.95 : 1.75, loco ? L / 2 - 1.0 : 0]);
+        setPart(trRoof, n, [2.1, 0.35, L - 0.6], [0, 0.45 + hgt + 0.17, 0]);
+        trCont.setMatrixAt(n, nothing);
+      }
+      const last = k === tr.cars.length - 1;
+      if (k === 0 || last) for (const e of [0, 1]) setPart(trLight, n * 2 + e, [0.4, 0.3, 0.08], [(e ? 0.7 : -0.7), 1.1, (k === 0 ? 1 : -1) * (L / 2 + 0.03)]);
+      else for (const e of [0, 1]) trLight.setMatrixAt(n * 2 + e, nothing);
+      n++;
+    });
+    for (const m of trainMeshes) m.instanceMatrix.needsUpdate = true;
+  }
+  placeTrains(0);
 
   /* ---------- sky extras ---------- */
   const extras = [];
@@ -846,7 +1388,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     const real = (now - (last || now)) / 1000, dt = Math.min(0.05, real); last = now;
     clock += Math.min(0.5, real);                          // the build follows real time, so a slow frame rate cannot stall it
     if (!built) { setBuild(clock); if (clock >= total) markBuilt(); }
-    if (!reduced) { placeCars(dt); placePeople(dt, clock); stepFx(dt, clock); driftClouds(dt); twinkle(clock); }
+    if (!reduced) { placeCars(dt); placePeople(dt, clock); stepFx(dt, clock); driftClouds(dt); twinkle(clock); placeFliers(dt, clock); placeTrains(dt); }
     if (glide) {
       glide.t = Math.min(1, glide.t + dt / glide.dur);
       const k = 1 - Math.pow(1 - glide.t, 3);
@@ -871,7 +1413,9 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
     weather: weatherName,
     /* For testing: where every vehicle and person is right now. */
     snapshot: () => ({ vehicles: cars.map(v => ({ type: v.type, mode: v.mode, d: v.d.join(','), at: along(v.path, v.s).map(n => +n.toFixed(2)) })),
-      crossing: people.filter(pr => pr.cross).length }),
+      crossing: people.filter(pr => pr.cross).length, waiting: cars.filter(v => v.wait > 0 && v.mode === 'seg' && !v.committed).length,
+      fliers: fliers.map(f => ({ onSkyway: !!f.sky, s: +f.s.toFixed(1) })), skyways: skyways.length,
+      trains: trains.map(tr => ({ kind: tr.kind, front: +tr.front.toFixed(1), dwell: +tr.dwell.toFixed(1), active: tr.kind === 'pax' || tr.active })) }),
     seasons: { autumn: autumnTrees, christmas: xmas },
     finish: markBuilt,
     /* factor below 1 moves in, above 1 moves out */
@@ -906,7 +1450,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
       controls.dispose(); renderer.dispose(); canvas.remove();
       for (const k of Object.values(kinds)) k.geo.dispose();
       dressGeo.dispose();
-      solid.dispose(); glass.dispose(); glowMat.dispose(); bulbMat.dispose(); lampMat.dispose(); lightMat.dispose();
+      solid.dispose(); glass.dispose(); glowMat.dispose(); bulbMat.dispose(); lampMat.dispose(); lightMat.dispose(); sigMat.dispose(); flyGlowMat.dispose(); trLightMat.dispose();
       for (const e of extras) { e.geometry.dispose(); e.material.dispose(); }
       if (cloudGeo) { cloudGeo.dispose(); cloudMat.dispose(); }
       if (skyTexture) skyTexture.dispose();
