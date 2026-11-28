@@ -281,7 +281,8 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
   /* The railway loop (see "railway" below) dips under each main road: an open cutting slopes down on
      each side, and the middle, under the road, is a covered tunnel. The ground is laid in pieces that
      leave those cuttings open. */
-  const RING = 80, RC = 14, RS = RING - RC, BR = 16, FAR_RAIL = 400;
+  const RING = 80, RC = 14, RS = RING - RC, BR = 16;
+  const FAR_RAIL = HALF + 680;                         // the same distance out as the main roads
   const COVER = 9, RAMP_END = 22, DEPTH = 5, CUT_W = 3;     // tunnel where |d| < 9, ramps from 9 to 22, 5 deep
   const cuts = [];
   for (const sd of [-1, 1]) for (const [a0, a1] of [[COVER, RAMP_END], [-RAMP_END, -COVER]]) {
@@ -1190,7 +1191,7 @@ export async function startCity({ container, reduced = false, onBuilt = () => {}
       const mid = tr.front - c.off - c.len / 2, a = trackPoint(tr, mid + c.len / 2 - 1.2), b = trackPoint(tr, mid - c.len / 2 + 1.2);
       const hidden = !a || !b || (tr.kind === 'cargo' && !tr.active);
       const x = hidden ? 0 : (a[0] + b[0]) / 2, z = hidden ? 0 : (a[1] + b[1]) / 2;
-      if (hidden || inTunnel(x, z) || Math.abs(x) > 380 || Math.abs(z) > 380) {
+      if (hidden || inTunnel(x, z) || Math.abs(x) > FAR_RAIL || Math.abs(z) > FAR_RAIL) {
         for (const m of [trBody, trGlass, trRoof, trCont]) m.setMatrixAt(n, nothing);
         for (const e of [0, 1]) { trBogie.setMatrixAt(n * 2 + e, nothing); trLight.setMatrixAt(n * 2 + e, nothing); }
         n++; return;
